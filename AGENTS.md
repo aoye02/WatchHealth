@@ -73,9 +73,9 @@ Push-Location backend; ..\.venv\Scripts\python.exe main.py; Pop-Location   # 起
 2. **“期末周”是合成出来的**：生成器只在第 30–37 天加 `stress_wave=2.5`；窗口 18–31 的最后一天是模拟期末周第 2 天。不要把它说成真实日历。
 3. **标准化不许泄漏**：`mu/sigma` 只能由训练用户拟合（`fit_scaler(X[tr])`），测试用户只 transform。
 4. **`best_lstm.pth` 已被 git 跟踪**，重训会覆盖；未被要求时不要重训，重训后指标可能有 ±0.01 波动，需同步 `experiment/results.csv`。
-5. **仓库没有根 `.gitignore`**，`backend/__pycache__`、`model/__pycache__` 的 `.pyc` 已被提交；**不要**再提交 `.venv/`、`__pycache__/`、`data/raw/`、新生成的大图。
+5. **根目录已有 `.gitignore`**：`__pycache__/`、`*.pyc`、`.venv/`、`data/raw/`、`.env*`、系统/编辑器/临时文件都已忽略；`backend/__pycache__`、`model/__pycache__` 已 `git rm --cached`。**不要**把缓存、虚拟环境、原始数据再加回来。
 6. **示例数据必须标注**：睡眠阶段、计划、补剂、生物年龄、其余 10 项指标都是占位内容，必须保留“示例/占位”标记，不能伪装成真实结果。
-7. **不要把“待接入”写成已完成**：预约排期仍未接后端，只能呈现界面并明确提示；聊天与刷新预测已实现，不要退回占位。
+7. **不要把“待接入”写成已完成**：预约只是本地记录（刷新丢失），不要宣称已对接排期；聊天与刷新预测已实现，不要退回占位。
 8. **前端两份实现互不依赖**：改 `presentation/` 不要顺手改 `frontend/`；反之亦然。
 
 ## 7. 代码风格

@@ -1,0 +1,58 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ===== 环境变量 / 密钥（不要上传） =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+spark*.json
+
+# ===== 数据：原始数据体积大，放本地，不上传 =====
+data/raw/
+
+# ===== 编辑器 / 系统文件 =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 日志 / 临时文件 =====
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+~$*
+
+# ===== 运行时产物 / 临时截图 =====
+browser-screenshots/
+presentation/assets/preview/_*.png
+
+# ===== 其他 =====
+.ipynb_checkpoints/
+node_modules/
+.cache/

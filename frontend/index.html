@@ -566,6 +566,12 @@ ul,ol{padding:0;list-style:none}
 .footer .f-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .footer .f-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase}
 .footer a:hover{color:var(--ink)}
+.chart-tip{
+  position:fixed;z-index:300;pointer-events:none;background:rgba(15,17,15,.92);color:#fff;
+  border-radius:10px;padding:7px 10px;font-family:var(--font-mono);font-size:10px;
+  letter-spacing:.04em;transform:translate(-50%,-130%);opacity:0;transition:opacity .15s;white-space:nowrap;
+}
+.chart-tip.show{opacity:1}
 .toast{
   position:fixed;left:50%;bottom:28px;transform:translate(-50%,16px);z-index:200;
   background:rgba(15,17,15,.94);color:#fff;border-radius:999px;padding:12px 20px;
@@ -889,7 +895,10 @@ ul,ol{padding:0;list-style:none}
       <div class="eyebrow"><span class="dot-live"></span>昨夜 · 23:12 – 04:54 · 示例数据</div>
       <div class="head-row">
         <h1 class="display">5 小时 42 分。<span class="dim">深睡少了 34 分钟。</span></h1>
-        <div class="daychips" id="weekStrip" style="width:min(430px,100%)"></div>
+        <div style="width:min(430px,100%)">
+          <div class="mono" style="margin-bottom:8px">近 7 晚深睡（分钟）</div>
+          <div class="daychips" id="weekStrip"></div>
+        </div>
       </div>
     </div>
 
@@ -1069,8 +1078,8 @@ ul,ol{padding:0;list-style:none}
       <article class="card chat-card reveal" style="--d:90ms">
         <div class="chat-head">
           <div class="who">
-            <b>腕上健康 · 本地模型</b>
-            <span>本地模型 · 长短期记忆网络预测 + 本地模板</span>
+            <b id="chatTitle">今日状态复盘</b>
+            <span>腕上健康 · 本地模型 · 规则回复</span>
           </div>
           <span class="chip chip-lime-soft">运行中 · 本机</span>
         </div>
@@ -1104,8 +1113,8 @@ ul,ol{padding:0;list-style:none}
           <p class="body-sm" style="margin-top:6px">每周用新数据复算一次预测与异常阈值。</p>
           <div class="daychips" id="dayChips"></div>
           <div class="slotgrid" id="slotGrid"></div>
-          <button class="btn btn-dark" type="button" disabled>确认时间 · 待接入</button>
-          <div class="chat-note"><span class="dot-live"></span>原型占位 · 无真实排期</div>
+          <button class="btn btn-dark" type="button" id="confirmBooking">确认时间</button>
+          <div class="chat-note"><span class="dot-live"></span>本地记录 · 未对接排期系统</div>
         </article>
       </div>
     </div>
@@ -1495,7 +1504,7 @@ ul,ol{padding:0;list-style:none}
         <div class="trend-val">${fmt(last, t.dec)}<small>${t.unit}</small>
           <span class="trend-delta ${cls}">${sign(delta, t.dec === 0 ? 0 : 1)}</span>
         </div>
-        <div class="trend-chart">${lineSVG(arr, 220, 56, '#0F110F', { padX: 2, padY: 6, dots: true })}</div>
+        <div class="trend-chart" data-series="${arr.join(',')}" data-unit="${t.unit}" data-dec="${t.dec}">${lineSVG(arr, 220, 56, '#0F110F', { padX: 2, padY: 6, dots: true })}</div>
       </div>`;
     }).join('');
   }
@@ -1550,7 +1559,7 @@ ul,ol{padding:0;list-style:none}
       </div>
       <div class="detail-name">${m.name}</div>
       <div class="detail-val">${val}</div>
-      <div class="detail-chart">
+      <div class="detail-chart" data-series="${m.series.join(',')}" data-unit="${m.unit}" data-dec="${m.dec}">
         ${lineSVG(m.series, 320, 112, '#D7F43A', { padX: 6, padY: 10, dotLast: true })}
         <div class="detail-axis"><span>第 1 天</span><span>第 7 天</span><span>第 14 天</span></div>
       </div>
@@ -1613,11 +1622,11 @@ ul,ol{padding:0;list-style:none}
 
   function renderSleepPage() {
     $('#scoreDial').innerHTML = dialSVG(64);
-    $('#weekStrip').innerHTML = [
-      ['四', 68], ['五', 72], ['六', 65], ['日', 70],
-      ['一', 61], ['二', 52], ['三', 64]
-    ].map(([d, s], i, arr) =>
-      `<div class="daychip ${i === arr.length - 1 ? 'is-active' : ''}"><span>${d}</span><b>${s}</b></div>`).join('');
+    const nightLabels = ['四', '五', '六', '日', '一', '二', '三'];
+    const nightDeep = SERIES.deep_sleep_min.slice(-7).map((v) => Math.round(v));
+    $('#weekStrip').innerHTML = nightDeep.map((v, i) =>
+      `<button type="button" class="daychip ${i === 6 ? 'is-active' : ''}" data-night="${i}" title="深睡 ${v} 分钟">
+        <span>${nightLabels[i]}</span><b>${v}</b></button>`).join('');
 
     // 就寝 / 起床：0 = 22:00，600 = 08:00
     const nights = [
@@ -1724,20 +1733,33 @@ ul,ol{padding:0;list-style:none}
 
   /* ---------------- 8. 本地模型对话 ---------------- */
   const THREADS = [
-    { id: '01', t: '今日状态复盘', p: '心率变异性 23.7 毫秒，明天 8.5/10', active: true },
-    { id: '02', t: '心率变异性预警解读', p: '偏离基线 5.4 个标准差，什么意思', active: false },
-    { id: '03', t: '睡眠改善计划', p: '深睡为什么掉到 47 分钟', active: false },
-    { id: '04', t: '期末周训练调整', p: '把高强度训练换成散步', active: false }
+    { id: '01', t: '今日状态复盘', p: '心率变异性 23.7 毫秒，明天 8.5/10', greeting: '主人，我在。可以问我今天的指标、明天的压力预测，或者今晚怎么安排。' },
+    { id: '02', t: '心率变异性预警解读', p: '偏离基线 5.4 个标准差，什么意思', greeting: '主人，想了解哪一天的心率变异性变化？我可以按最近 14 天拆开说。' },
+    { id: '03', t: '睡眠改善计划', p: '深睡为什么掉到 47 分钟', greeting: '主人，昨晚深睡 47 分钟。要我帮你把就寝时间往前挪一点吗？' },
+    { id: '04', t: '期末周训练调整', p: '把高强度训练换成散步', greeting: '主人，期末周建议先降强度。说说你原本的训练计划？' }
   ];
 
-  const CHAT = [
-    { k: 'day', text: '本次对话' },
-    { k: 'model', text: '主人，我在。可以问我今天的指标、明天的压力预测，或者今晚怎么安排。' },
-    { k: 'card', text: '' }
-  ];
+  let currentThread = '01';
+  const threadMsgs = {};
+  const threadApi = {};
 
-  function msgHTML(m, i) {
-    if (m.k === 'day') return `<div class="chat-day">${m.text}</div>`;
+  function threadState(id) {
+    if (!threadMsgs[id]) {
+      const t = THREADS.find((x) => x.id === id) || THREADS[0];
+      threadMsgs[id] = [
+        { k: 'day', text: '本次对话' },
+        { k: 'model', text: t.greeting }
+      ];
+      if (id === '01') threadMsgs[id].push({ k: 'card', text: '' });
+      threadApi[id] = [];
+    }
+    return threadMsgs[id];
+  }
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function msgHTML(m) {
+    if (m.k === 'day') return `<div class="chat-day">${esc(m.text)}</div>`;
     if (m.k === 'card') {
       const h = markerById('hrv_rmssd');
       return `<div class="msg-card">
@@ -1746,30 +1768,48 @@ ul,ol{padding:0;list-style:none}
         <span class="chip ${CHIP[h.status]}">${STATUS_CN[h.status]}</span>
       </div>`;
     }
+    if (m.k === 'system') {
+      return `<div class="msg system"><div class="bubble" style="background:transparent;border:1px dashed var(--line-2);color:var(--ink-4);font-size:12px">
+        ${esc(m.text)}</div></div>`;
+    }
     return `<div class="msg ${m.k}">
-      <div class="bubble">${m.text}</div>
+      <div class="bubble">${esc(m.text)}</div>
+      ${m.stamp ? `<span class="stamp">${m.stamp}</span>` : ''}
     </div>`;
   }
 
   function renderChat() {
-    $('#chatLog').innerHTML = CHAT.map(msgHTML).join('') + `<div id="chatEnd"></div>`;
+    const t = THREADS.find((x) => x.id === currentThread);
+    const title = $('#chatTitle');
+    if (title) title.textContent = t.t;
+    $('#chatLog').innerHTML = threadState(currentThread).map(msgHTML).join('') + `<div id="chatEnd"></div>`;
+    const end = $('#chatEnd');
+    if (end) end.scrollIntoView({ block: 'nearest' });
   }
+
+  const BOOK_DAYS = ['周一', '周二', '周三', '周四', '周五'];
+  const BOOK_SLOTS = [['08:30', true], ['10:00', false], ['12:30', true], ['14:00', true], ['16:30', true], ['19:00', true]];
+  const booking = { day: 0, slot: '14:00', confirmed: false };
 
   function renderCareChrome() {
     $('#threadList').innerHTML = THREADS.map((t) => `
-      <button type="button" class="thread ${t.active ? 'is-active' : ''}" data-thread="${t.id}">
+      <button type="button" class="thread ${t.id === currentThread ? 'is-active' : ''}" data-thread="${t.id}">
         <span class="tavatar">${t.id}</span>
         <span class="tbody"><b>${t.t}</b><span>${t.p}</span></span>
-        ${t.active ? '<span class="dot"></span>' : ''}
+        ${t.id === currentThread ? '<span class="dot"></span>' : ''}
       </button>`).join('');
 
-    $('#dayChips').innerHTML = ['周一', '周二', '周三', '周四', '周五']
-      .map((d, i) => `<button type="button" class="daychip is-plain ${i === 0 ? 'is-active' : ''}" data-day="${i}">
+    $('#dayChips').innerHTML = BOOK_DAYS.map((d, i) => `
+      <button type="button" class="daychip is-plain ${i === booking.day ? 'is-active' : ''}" data-day="${i}">
         <b>${d}</b></button>`).join('');
 
-    const slots = [['08:30', 1], ['10:00', 0], ['12:30', 1], ['14:00', 1], ['16:30', 1], ['19:00', 1]];
-    $('#slotGrid').innerHTML = slots.map(([s, ok], i) =>
-      `<button type="button" class="slotchip ${i === 3 ? 'is-active' : ''}" ${ok ? '' : 'disabled'} data-slot="${s}">${s}</button>`).join('');
+    $('#slotGrid').innerHTML = BOOK_SLOTS.map(([s, ok]) =>
+      `<button type="button" class="slotchip ${s === booking.slot ? 'is-active' : ''}" ${ok ? '' : 'disabled'} data-slot="${s}">${s}</button>`).join('');
+
+    const btn = $('#confirmBooking');
+    if (btn) {
+      btn.textContent = booking.confirmed ? `已预约 ${BOOK_DAYS[booking.day]} ${booking.slot}` : '确认时间';
+    }
   }
 
   /* ---------------- 9. 路由 ---------------- */
@@ -1803,6 +1843,7 @@ ul,ol{padding:0;list-style:none}
   /* ---------------- 10. 事件 ---------------- */
   function bind() {
     window.addEventListener('hashchange', renderRoute);
+    document.addEventListener('mousemove', showChartTip);
 
     // 总览：指标磁贴 → 指标页并选中
     document.addEventListener('click', (e) => {
@@ -1868,22 +1909,62 @@ ul,ol{padding:0;list-style:none}
 
       const thread = e.target.closest('[data-thread]');
       if (thread) {
-        $$('.thread').forEach((t) => t.classList.toggle('is-active', t === thread));
-        toast('切换会话待接入：预览版只展示示例对话');
+        currentThread = thread.dataset.thread;
+        renderChat();
+        renderCareChrome();
         return;
       }
 
       const day = e.target.closest('[data-day]');
       if (day) {
-        $$('[data-day]').forEach((d) => d.classList.toggle('is-active', d === day));
-        toast('预约排期待接入：预览版为占位');
+        booking.day = Number(day.dataset.day);
+        booking.confirmed = false;
+        renderCareChrome();
         return;
       }
 
       const slot = e.target.closest('[data-slot]');
       if (slot) {
-        $$('[data-slot]').forEach((s) => s.classList.toggle('is-active', s === slot));
-        toast('时段选择为视觉占位，未提交排期');
+        booking.slot = slot.dataset.slot;
+        booking.confirmed = false;
+        renderCareChrome();
+        return;
+      }
+
+      const confirm = e.target.closest('#confirmBooking');
+      if (confirm) {
+        if (booking.confirmed) {
+          booking.confirmed = false;
+          renderCareChrome();
+          toast('已取消本次本地预约记录', '预约');
+        } else {
+          booking.confirmed = true;
+          renderCareChrome();
+          toast(`已记录 ${BOOK_DAYS[booking.day]} ${booking.slot}（仅本地）`, '预约');
+        }
+        return;
+      }
+
+      const night = e.target.closest('[data-night]');
+      if (night) {
+        const i = Number(night.dataset.night);
+        $$('[data-night]').forEach((n) => n.classList.toggle('is-active', n === night));
+        const deepArr = SERIES.deep_sleep_min.slice(-7).map((v) => Math.round(v));
+        const remArr = SERIES.rem_min.slice(-7).map((v) => Math.round(v));
+        const cards = $$('#page-sleep .stat-grid-2 .stat');
+        if (cards[0]) {
+          cards[0].querySelector('.stat-val').innerHTML = `${deepArr[i]}<small>分钟</small>`;
+          const f0 = cards[0].querySelector('.stat-foot');
+          f0.textContent = deepArr[i] >= 80 ? '达到目标' : `比目标少 ${80 - deepArr[i]} 分钟`;
+          f0.className = 'stat-foot' + (deepArr[i] >= 80 ? '' : ' bad');
+        }
+        if (cards[1]) {
+          cards[1].querySelector('.stat-val').innerHTML = `${remArr[i]}<small>分钟</small>`;
+          const f1 = cards[1].querySelector('.stat-foot');
+          f1.textContent = remArr[i] >= 70 ? '达到目标' : `比目标少 ${70 - remArr[i]} 分钟`;
+          f1.className = 'stat-foot' + (remArr[i] >= 70 ? '' : ' bad');
+        }
+        toast(`第 ${i + 1} 晚：深睡 ${deepArr[i]} 分钟 · 快速眼动 ${remArr[i]} 分钟`, '睡眠');
         return;
       }
 
@@ -1926,11 +2007,9 @@ ul,ol{padding:0;list-style:none}
         const input = form.querySelector('input');
         const q = input.value.trim() || '解释一下这项指标的变化';
         location.hash = '#/care';
-        const main = $('#chatInput');
-        main.value = q;
-        setTimeout(() => { main.focus(); }, 80);
-        toast('已把问题带到对话页 · 发送逻辑待接入');
+        setTimeout(() => { appendChat(q); }, 150);
         input.value = '';
+        toast('已发送到对话', '对话');
         return;
       }
 
@@ -1945,13 +2024,38 @@ ul,ol{padding:0;list-style:none}
     });
   }
 
+  let chartTipEl = null;
+  function showChartTip(e) {
+    const box = e.target.closest('[data-series]');
+    if (!box) {
+      if (chartTipEl) chartTipEl.classList.remove('show');
+      return;
+    }
+    const vals = box.dataset.series.split(',').map(Number).filter((v) => Number.isFinite(v));
+    if (!vals.length) return;
+    const rect = box.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const idx = Math.round(ratio * (vals.length - 1));
+    const dec = Number(box.dataset.dec || 0);
+    const unit = box.dataset.unit || '';
+    if (!chartTipEl) {
+      chartTipEl = document.createElement('div');
+      chartTipEl.className = 'chart-tip';
+      document.body.appendChild(chartTipEl);
+    }
+    chartTipEl.textContent = `第 ${idx + 1} 天 · ${vals[idx].toFixed(dec)}${unit ? ' ' + unit : ''}`;
+    chartTipEl.style.left = e.clientX + 'px';
+    chartTipEl.style.top = rect.top + 'px';
+    chartTipEl.classList.add('show');
+  }
+
   function syncFilterUI() {
     $$('#statusSeg [data-status]').forEach((b) =>
       b.classList.toggle('is-active', b.dataset.status === filters.status));
   }
 
   /* ---------------- 12. 实时接口 ---------------- */
-  const LIVE = { demo: null, prediction: null, anomaly: null, brief: null, actualNext: null, chat: [] };
+  const LIVE = { demo: null, prediction: null, anomaly: null, brief: null, actualNext: null };
   const REAL_FIELDS = {
     resting_hr: 'resting_hr', hrv_rmssd: 'hrv_rmssd', deep_sleep_min: 'deep_sleep_min',
     rem_min: 'rem_min', steps: 'steps', sedentary_min: 'sedentary_min', stress_self: 'prev_stress'
@@ -1987,6 +2091,7 @@ ul,ol{padding:0;list-style:none}
     renderMarkers();
     renderDetail(activeMarker);
     renderSleepMini();
+    renderSleepPage();
   }
 
   async function loadLiveData() {
@@ -2105,17 +2210,17 @@ ul,ol{padding:0;list-style:none}
   }
 
   async function appendChat(text) {
-    const log = $('#chatLog');
-    const end = $('#chatEnd') || log;
+    const threadId = currentThread;
+    const msgs = threadState(threadId);
+    const history = threadApi[threadId];
     const now = new Date();
     const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const user = document.createElement('div');
-    user.className = 'msg user';
-    user.innerHTML = `<div class="bubble"></div><span class="stamp">${stamp}</span>`;
-    user.querySelector('.bubble').textContent = text;
-    log.insertBefore(user, end);
-    LIVE.chat.push({ role: 'user', content: text });
+    msgs.push({ k: 'user', text, stamp });
+    history.push({ role: 'user', content: text });
+    if (currentThread === threadId) renderChat();
 
+    const log = $('#chatLog');
+    const end = $('#chatEnd') || log;
     const typing = document.createElement('div');
     typing.className = 'msg model';
     typing.innerHTML = `<div class="typing"><i></i><i></i><i></i></div>`;
@@ -2125,22 +2230,19 @@ ul,ol{padding:0;list-style:none}
       const data = await apiJson('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: LIVE.chat.slice(-8), context: chatContext() })
+        body: JSON.stringify({ messages: history.slice(-8), context: chatContext() })
       });
-      typing.remove();
-      const msg = document.createElement('div');
-      msg.className = 'msg model';
-      msg.innerHTML = '<div class="bubble"></div>';
-      msg.querySelector('.bubble').textContent = data.reply;
-      log.insertBefore(msg, end);
-      LIVE.chat.push({ role: 'assistant', content: data.reply });
+      msgs.push({ k: 'model', text: data.reply });
+      history.push({ role: 'assistant', content: data.reply });
+      const t = THREADS.find((x) => x.id === threadId);
+      if (t) t.p = data.reply.slice(0, 26);
+      if (currentThread === threadId) {
+        renderChat();
+        renderCareChrome();
+      }
     } catch (e) {
-      typing.remove();
-      const hint = document.createElement('div');
-      hint.className = 'msg system';
-      hint.innerHTML = `<div class="bubble" style="background:transparent;border:1px dashed var(--line-2);color:var(--ink-4);font-size:12px">
-        本地对话接口不可用：${e.message}</div>`;
-      log.insertBefore(hint, end);
+      msgs.push({ k: 'system', text: '本地对话接口不可用：' + e.message });
+      if (currentThread === threadId) renderChat();
       toast('对话失败：' + e.message, '错误');
     }
   }

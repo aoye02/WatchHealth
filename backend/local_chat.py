@@ -57,7 +57,7 @@ def generate_reply(messages, context=None) -> str:
     if not has_ctx and not any(k in text for k in ("睡", "熬夜", "失眠", "困", "作息", "几点")):
         return (
             "主人，我暂时没拿到今天的指标数据。可以先问我作息、复习或运动安排，"
-            "等页面数据加载好，我再结合 HRV 和压力预测细说。"
+            "等页面数据加载好，我再结合心率变异性和压力预测细说。"
         )
 
     if any(k in text for k in ("睡", "熬夜", "失眠", "困", "作息", "几点")):
@@ -83,13 +83,13 @@ def generate_reply(messages, context=None) -> str:
         if isinstance(stress, (int, float)) and stress >= 7:
             return (
                 "主人，明天不适合高强度训练。换成 20 分钟快走或拉伸，"
-                "等压力回落到 5 以下、HRV 回到基线附近再加量。"
+                "等压力回落到 5 以下、心率变异性回到基线附近再加量。"
             )
         return "主人，状态还可以，安排 30 分钟中等强度运动就行，别在睡前两小时内练。"
 
     if any(k in text for k in ("hrv", "心率变异", "心率", "心脏", "心跳")):
         return (
-            f"主人，当前 HRV {_v(hrv, ' 毫秒', 1)}，个人基线 {_v(baseline, ' 毫秒', 1)}，"
+            f"主人，当前心率变异性 {_v(hrv, ' 毫秒', 1)}，个人基线 {_v(baseline, ' 毫秒', 1)}，"
             f"低 {_v(drop, '%')}。这通常和熬夜、压力有关，今晚优先补觉；"
             "如果持续走低或伴随胸闷心悸，去校医院看看。"
         )
@@ -109,11 +109,11 @@ def generate_reply(messages, context=None) -> str:
     if not has_ctx:
         return (
             "主人，我暂时没拿到今天的指标数据。可以先问我作息、复习或运动安排，"
-            "等页面数据加载好，我再结合 HRV 和压力预测细说。"
+            "等页面数据加载好，我再结合心率变异性和压力预测细说。"
         )
 
     return (
-        f"主人，今天 HRV {_v(hrv, ' 毫秒', 1)}（基线 {_v(baseline, ' 毫秒', 1)}），"
+        f"主人，今天心率变异性 {_v(hrv, ' 毫秒', 1)}（基线 {_v(baseline, ' 毫秒', 1)}），"
         f"明天压力预测 {_v(stress, '/10', 1)}、疲劳 {_v(fatigue, '/10', 1)}。"
         "今晚优先补觉，其他安排明天再说。"
     )
