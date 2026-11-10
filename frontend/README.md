@@ -18,7 +18,6 @@ Push-Location backend; ..\.venv\Scripts\python.exe main.py; Pop-Location
 |---|---|
 | `index.html` | 页面 + 样式 + 逻辑（单文件，hash 路由） |
 | `fonts.css` | Geist / Geist Mono（base64 内嵌，离线可用） |
-| `lib/echarts.min.js` | 旧版看板遗留，新页面**不再引用** |
 
 ## 路由
 

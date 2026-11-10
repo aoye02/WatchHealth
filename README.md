@@ -31,8 +31,8 @@ WatchHealth-LSTM/
 │  ├─ llm_prompt.py           ← 讯飞星火 HTTP 接入 + 本地模板兜底
 │  └─ requirements.txt
 ├─ frontend/                  ← 健康看板（Mira Bio 风格单页，无需 npm）
-│  ├─ index.html
-│  └─ lib/echarts.min.js      ← 已本地化，断网可演示
+│  ├─ index.html              ← 页面 + 样式 + 逻辑（内联 SVG 图表）
+│  └─ fonts.css               ← 字体内嵌，断网可演示
 ├─ presentation/              ← PPT 全套材料（重点！）
 │  ├─ slide_content.md        ← PPT 逐页文字
 │  ├─ PPT_script.md           ← 演讲稿

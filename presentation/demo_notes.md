@@ -8,7 +8,7 @@
 - [ ] 浏览器只保留一个标签页：http://localhost:8000（看板由后端直接托管，**不需要 npm/前端 dev server**）
 - [ ] 后端 `cd backend && uvicorn main:app --port 8000` 已启动，访问 http://localhost:8000/api/health 返回 `{"status":"ok"}`
 - [ ] `model/best_lstm.pth` 和 `data/processed/demo_data.csv` 存在（没有就先跑 `python model/synthesize_demo_data.py && python model/train.py`）
-- [ ] ECharts 已本地化（frontend/lib/echarts.min.js），**教室断网也能演示**
+- [ ] 前端断网可演示（内联 SVG、字体内嵌，无 CDN）
 - [ ] 组员 E 已准备**离线截图/录屏**作为兜底（接口崩了直接切截图讲）
 - [ ] （可选）讯飞星火已配置环境变量 `SPARK_API_PASSWORD`；没配也不崩，页面会标注"本地模板生成"
 

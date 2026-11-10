@@ -93,7 +93,7 @@ Push-Location backend; ..\.venv\Scripts\python.exe main.py; Pop-Location   # 起
 - 2 空格缩进；CSS 自定义属性集中在 `:root`；组件用语义类名（`.card`、`.chip`、`.mrow`、`.checkrow`）。
 - 颜色/字号不写死零散值，优先复用 token。
 - 交互必须有可访问名称（`aria-label`）、键盘可用、尊重 `prefers-reduced-motion`。
-- 图表用内联 SVG 或本地 ECharts，**不要**引外链字体/图表库。
+- 图表用内联 SVG，**不要**引外链字体/图表库。
 
 **通用**
 - 命名、注释跟着所在文件现有风格走；不重排无关代码，不制造无关 diff。
