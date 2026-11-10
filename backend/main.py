@@ -21,6 +21,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from predict import predict_next            # noqa: E402
 from anomaly_detect import detect_hrv_drop  # noqa: E402
 from llm_prompt import generate_brief       # noqa: E402
+from local_chat import generate_reply       # noqa: E402
 
 app = FastAPI(title="WatchHealth-LSTM API", version="1.0")
 app.add_middleware(
@@ -36,6 +37,16 @@ FEATURES = ["resting_hr", "hrv_rmssd", "deep_sleep_min", "rem_min",
 class PredictReq(BaseModel):
     stats_7day: dict   # {date: {resting_hr, hrv_rmssd, ...}}
     hrv_series: list   # 过去 N 天 HRV 列表
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatReq(BaseModel):
+    messages: list[ChatMessage]
+    context: dict | None = None   # {stress, fatigue, hrv, baseline, drop_pct, deep, alert}
 
 
 @app.get("/api/health")
@@ -77,6 +88,16 @@ def predict(req: PredictReq):
         "anomaly": anomaly,
         "brief": brief,
     }
+
+
+@app.post("/api/chat")
+def chat(req: ChatReq):
+    """本地规则对话：不联网，用前端传来的当前指标生成可解释回复。
+
+    将来接入本地 LLM 时保持同样的请求/响应形状即可，前端无需改动。
+    """
+    reply = generate_reply([m.model_dump() for m in req.messages], req.context)
+    return {"reply": reply, "source": "local-rule"}
 
 
 @app.get("/")

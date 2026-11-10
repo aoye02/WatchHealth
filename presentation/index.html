@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WatchHealth-LSTM · 本地健康看板（改版预览）</title>
+<meta name="description" content="WatchHealth-LSTM 前端改版静态预览：浅色健康看板，含本地模型对话与明日状态预测。示例数据，交互多为占位。">
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+/* ============================================================
+   Design tokens —— 对齐 Mira Bio：浅色、柔和、安静，lime 强调
+   ============================================================ */
+:root{
+  --bg:#EFEFEE;
+  --surface:#FFFFFF;
+  --surface-2:#F7F7F5;
+  --surface-3:#ECECEA;
+  --surface-4:#E3E3DF;
+
+  --ink:#0F110F;
+  --ink-2:#3E3E3B;
+  --ink-3:#6B6B68;
+  --ink-4:#94948F;
+  --ink-5:#B6B6B0;
+
+  --line:rgba(15,17,15,.08);
+  --line-2:rgba(15,17,15,.14);
+
+  --lime:#D7F43A;
+  --lime-deep:#C6E32B;
+  --green:#8FD94E;
+  --lime-soft:#F2F8DC;
+  --lime-soft-2:#E8F2C4;
+
+  --sand:#F7E9B4;
+  --sand-ink:#6F5310;
+  --blush:#F7DDD5;
+  --blush-ink:#8E3B21;
+
+  --grad-dark:radial-gradient(120% 130% at 88% -10%,#8F9E47 0%,#59642C 32%,#262A1B 66%,#12140E 100%);
+  --grad-dark-2:radial-gradient(120% 120% at 10% -10%,#6E7A38 0%,#3A4122 40%,#171A11 100%);
+
+  --radius-xl:32px;
+  --radius-lg:22px;
+  --radius-md:16px;
+  --radius-sm:12px;
+
+  --shadow-card:0 1px 0 rgba(255,255,255,.75) inset,0 1px 2px rgba(15,17,15,.04),0 34px 60px -50px rgba(15,17,15,.55);
+  --shadow-dark:0 40px 70px -46px rgba(15,17,15,.75);
+
+  --font-sans:"Geist","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+
+  --ease:cubic-bezier(.2,.7,.2,1);
+  --maxw:1240px;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{
+  margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:var(--font-sans);font-size:15px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(58% 40% at 84% -8%,rgba(215,244,58,.26),transparent 68%),
+    radial-gradient(46% 34% at 2% -4%,rgba(255,255,255,.85),transparent 70%);
+}
+::selection{background:var(--lime);color:var(--ink)}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+h1,h2,h3,h4,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:8px}
+
+.app{position:relative;z-index:1}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+
+/* ---------- type scale（22 个文本样式，节选用得上的） ---------- */
+.mono{
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-4);font-weight:500;
+}
+.mono-ink{color:var(--ink-3)}
+.eyebrow{
+  display:flex;align-items:center;gap:9px;font-family:var(--font-mono);
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-4);font-weight:500;
+}
+.display{
+  font-size:clamp(30px,4.4vw,58px);line-height:1.03;letter-spacing:-.036em;
+  font-weight:460;margin:10px 0 0;
+}
+.display .dim{color:#A9A9A3}
+.h2{font-size:23px;line-height:1.2;letter-spacing:-.02em;font-weight:500}
+.h3{font-size:17px;line-height:1.3;letter-spacing:-.012em;font-weight:500}
+.body{font-size:14.5px;line-height:1.55;color:var(--ink-2)}
+.body-sm{font-size:13px;line-height:1.5;color:var(--ink-3)}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.link{font-size:13px;color:var(--ink-2);border-bottom:1px solid var(--line-2);padding-bottom:1px;transition:border-color .2s,color .2s}
+.link:hover{color:var(--ink);border-color:var(--ink)}
+.dot-live{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(143,217,78,.18);flex:none}
+
+/* ---------- header / tabs ---------- */
+.nav-wrap{position:sticky;top:0;z-index:60;padding:14px 0 8px;background:linear-gradient(to bottom,rgba(239,239,238,.94) 62%,rgba(239,239,238,0));backdrop-filter:blur(3px)}
+.nav{
+  display:flex;align-items:center;gap:18px;
+  background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.75);
+  border-radius:999px;padding:8px 14px 8px 16px;
+  box-shadow:0 1px 2px rgba(15,17,15,.05),0 20px 40px -34px rgba(15,17,15,.5);
+  backdrop-filter:blur(18px) saturate(120%);
+}
+.brand{display:flex;align-items:center;gap:10px;padding-right:6px;flex:none}
+.brand-mark{
+  width:34px;height:34px;border-radius:11px;background:var(--ink);color:var(--lime);
+  display:grid;place-items:center;font-family:var(--font-mono);font-size:16px;font-weight:600;letter-spacing:-.04em;
+}
+.brand-name{font-size:16.5px;letter-spacing:-.03em;font-weight:500}
+.tabs{display:flex;align-items:center;gap:2px;margin:0 auto;background:rgba(15,17,15,.045);border-radius:999px;padding:4px}
+.tab{
+  padding:9px 16px;border-radius:999px;font-size:13.5px;color:var(--ink-3);
+  transition:background .25s var(--ease),color .25s var(--ease);white-space:nowrap;
+}
+.tab:hover{color:var(--ink)}
+.tab.is-active{background:var(--ink);color:#fff}
+.nav-right{display:flex;align-items:center;gap:10px;flex:none}
+.user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+.avatar{
+  width:28px;height:28px;border-radius:50%;background:var(--surface-3);display:grid;place-items:center;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.02em;color:var(--ink-3);
+}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:44px;padding:0 20px;border-radius:999px;font-size:13.5px;font-weight:500;
+  transition:transform .2s var(--ease),background .2s,box-shadow .2s,opacity .2s;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn-dark{background:var(--ink);color:#fff}
+.btn-dark:hover{background:#26281F}
+.btn-lime{background:var(--lime);color:var(--ink)}
+.btn-lime:hover{background:var(--lime-deep)}
+.btn-ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-sm{height:36px;padding:0 14px;font-size:12.5px}
+.btn[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+
+/* ---------- page shell ---------- */
+.page{display:none;padding-bottom:26px}
+.page.is-active{display:block}
+.page-head{margin:26px 0 22px}
+.head-row{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.head-stats{display:flex;align-items:flex-end;gap:26px;padding-bottom:6px}
+.hstat{display:flex;flex-direction:column;gap:3px;min-width:52px}
+.hstat b{font-size:26px;font-weight:450;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.hstat b small{font-size:12px;color:var(--ink-4);letter-spacing:0;font-weight:400;margin-left:2px}
+.hstat span{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-3)}
+.hstat i{width:5px;height:5px;border-radius:50%;flex:none}
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;align-items:start}
+.span-4{grid-column:span 4}
+.span-5{grid-column:span 5}
+.span-6{grid-column:span 6}
+.span-7{grid-column:span 7}
+.span-8{grid-column:span 8}
+.span-12{grid-column:span 12}
+.stack{display:flex;flex-direction:column;gap:18px}
+
+/* ---------- cards ---------- */
+.card{
+  background:var(--surface);border-radius:var(--radius-xl);padding:24px 26px;
+  border:1px solid rgba(255,255,255,.7);box-shadow:var(--shadow-card);position:relative;
+}
+.card-dark{
+  background:var(--grad-dark);color:#F3F3EC;border:1px solid rgba(255,255,255,.10);
+  box-shadow:var(--shadow-dark);
+}
+.card-dark .mono{color:rgba(255,255,255,.46)}
+.card-dark .body,.card-dark .body-sm{color:rgba(255,255,255,.66)}
+.card-dark .dim{color:rgba(255,255,255,.5)}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:6px}
+.card-sub{font-size:13.5px;line-height:1.5;color:var(--ink-3);margin-top:4px}
+.card-link{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--line-2);border-radius:999px;padding:6px 12px;transition:background .2s,color .2s,border-color .2s;white-space:nowrap}
+.card-link:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ---------- chips ---------- */
+.chip{
+  display:inline-flex;align-items:center;gap:6px;height:25px;padding:0 11px;border-radius:999px;
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;font-weight:500;
+  background:var(--surface-3);color:var(--ink-2);white-space:nowrap;
+}
+.chip-optimal{background:var(--lime);color:var(--ink)}
+.chip-watch{background:var(--sand);color:var(--sand-ink)}
+.chip-low{background:var(--blush);color:var(--blush-ink)}
+.chip-inrange{background:#EDEDEA;color:#63635F}
+.chip-plain{background:rgba(15,17,15,.06);color:var(--ink-2)}
+.chip-glass{background:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(6px)}
+.chip-lime-soft{background:var(--lime-soft-2);color:#4F5B10}
+
+/* ---------- overview: markers ---------- */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.tile{
+  text-align:left;background:var(--surface-2);border:1px solid rgba(15,17,15,.045);
+  border-radius:var(--radius-lg);padding:14px 14px 12px;min-width:0;
+  transition:background .25s var(--ease),transform .25s var(--ease),box-shadow .25s;
+}
+.tile:hover{background:#fff;transform:translateY(-2px);box-shadow:0 18px 30px -26px rgba(15,17,15,.6)}
+.tile-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}
+.tile-cat{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-4)}
+.tile-val{display:block;font-size:30px;line-height:1;font-weight:440;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.tile-val small{font-size:11.5px;color:var(--ink-4);letter-spacing:0;font-weight:400;margin-left:3px}
+.tile-name{display:block;font-size:12px;color:var(--ink-3);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile-range{display:block;margin-top:11px}
+
+/* range mini bar */
+.range{position:relative;height:12px;width:100%}
+.range svg{display:block;width:100%;height:12px;overflow:visible}
+
+/* ---------- alert strip ---------- */
+.alert{
+  display:flex;align-items:center;gap:14px;background:rgba(247,221,213,.5);
+  border:1px solid rgba(142,59,33,.14);border-radius:20px;padding:13px 18px;
+}
+.alert .alert-dot{
+  width:26px;height:26px;border-radius:50%;background:var(--blush-ink);color:#fff;flex:none;
+  display:grid;place-items:center;font-family:var(--font-mono);font-size:12px;font-weight:600;
+}
+.alert .alert-copy{font-size:13px;line-height:1.45;color:#6B3A28}
+.alert .alert-copy b{color:var(--blush-ink);margin-right:8px;font-weight:500}
+.alert .link{margin-left:auto;color:#6B3A28;border-color:rgba(142,59,33,.3);white-space:nowrap}
+.alert .link:hover{color:var(--blush-ink);border-color:var(--blush-ink)}
+
+/* ---------- bio age ---------- */
+.bioage{overflow:hidden;align-self:stretch;display:flex;flex-direction:column}
+.bioage .bio-num{font-size:clamp(52px,6.4vw,76px);line-height:.9;font-weight:430;letter-spacing:-.05em;margin-top:26px;color:#fff;font-variant-numeric:tabular-nums}
+.bioage .bio-num small{font-size:15px;letter-spacing:0;color:rgba(255,255,255,.55);margin-left:8px;font-weight:400}
+.bio-scale{position:relative;margin-top:10px;height:34px}
+.bio-meta{display:flex;justify-content:space-between;gap:10px;margin-top:auto;padding-top:22px;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.42)}
+.bio-ticks{position:absolute;inset:0;display:flex;align-items:flex-end;gap:3px}
+.bio-ticks i{flex:1;background:rgba(255,255,255,.28);border-radius:1px;height:9px}
+.bio-ticks i.on{background:var(--lime);height:22px}
+.bio-ticks i.mark{background:#fff;height:30px;width:2px;flex:none}
+.bio-labels{display:flex;justify-content:space-between;margin-top:6px;font-family:var(--font-mono);font-size:9.5px;color:rgba(255,255,255,.4)}
+
+/* ---------- prediction card ---------- */
+.pred{overflow:hidden;background:linear-gradient(180deg,#FFFFFF 0%,#FBFDF1 100%)}
+.pred-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.pred-actions{display:flex;align-items:center;gap:8px}
+.pred-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.25fr) minmax(0,1.1fr);gap:22px;margin-top:18px}
+.pred-score{
+  background:var(--lime);border-radius:var(--radius-lg);padding:18px 20px 16px;
+  display:flex;flex-direction:column;justify-content:space-between;min-height:196px;
+}
+.pred-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,17,15,.55)}
+.pred-num{font-size:clamp(56px,7vw,78px);line-height:.86;font-weight:430;letter-spacing:-.055em;margin:14px 0 2px;font-variant-numeric:tabular-nums}
+.pred-num span{font-size:17px;color:rgba(15,17,15,.45);letter-spacing:0;margin-left:4px}
+.pred-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.pred-score .chip-watch{background:rgba(15,17,15,.9);color:var(--lime)}
+.pred-score .chip-plain{background:rgba(255,255,255,.55);color:var(--ink-2)}
+.pred-vs{display:flex;align-items:center;gap:7px;margin-top:14px;font-size:11.5px;color:#3E4416;flex-wrap:wrap}
+.pred-vs b{font-weight:600}
+.pred-vs .ok{width:15px;height:15px;border-radius:50%;background:var(--ink);color:var(--lime);display:grid;place-items:center;font-size:9px;flex:none}
+.pred-basis{padding-top:2px}
+.basis-list{display:flex;flex-direction:column;gap:13px;margin-top:15px}
+.basis-item .basis-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--ink-2)}
+.basis-item .basis-top b{font-family:var(--font-mono);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.basis-track{height:4px;border-radius:99px;background:rgba(15,17,15,.07);margin-top:7px;overflow:hidden}
+.basis-track i{display:block;height:100%;border-radius:99px;background:var(--ink);transform-origin:left;animation:grow .9s var(--ease) both}
+.basis-track i.warn{background:#D9A24A}
+.basis-track i.bad{background:#C0704F}
+.pred-brief{border-left:1px solid var(--line);padding-left:22px;display:flex;flex-direction:column}
+.pred-brief .quote{font-size:14.5px;line-height:1.6;color:var(--ink-2);margin-top:12px;flex:1}
+.pred-brief .quote::before{content:"“";font-size:22px;color:var(--ink-5);line-height:0;vertical-align:-4px;margin-right:2px}
+.pred-brief .brief-src{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);margin-top:14px}
+.pred-brief .brief-cta{margin-top:12px}
+
+/* ---------- sleep mini ---------- */
+.sleep-mini{display:flex;gap:18px;align-items:center;margin-top:16px}
+.ring{position:relative;flex:none}
+.ring svg{display:block}
+.ring .ring-txt{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.ring .ring-txt b{font-size:24px;font-weight:450;letter-spacing:-.04em;line-height:1}
+.ring .ring-txt span{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.1em;color:var(--ink-4);text-transform:uppercase}
+.weekbars{display:flex;align-items:flex-end;gap:7px;height:58px;flex:1;min-width:0}
+.wbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%}
+.wbar i{width:100%;border-radius:6px;background:var(--surface-4);margin-top:auto;transition:background .2s}
+.wbar.last i{background:var(--lime)}
+.wbar span{font-family:var(--font-mono);font-size:8.5px;color:var(--ink-4)}
+.sleep-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line-2);font-size:12.5px;color:var(--ink-3)}
+
+/* ---------- plan mini ---------- */
+.checkrow{
+  display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;
+  font-size:13px;color:var(--ink-2);transition:background .2s,color .2s;width:100%;text-align:left;
+}
+.checkrow:hover{background:var(--surface-2)}
+.checkrow.done{background:var(--lime-soft)}
+.checkrow .box{
+  width:19px;height:19px;border-radius:50%;border:1px solid rgba(15,17,15,.18);flex:none;
+  display:grid;place-items:center;color:transparent;font-size:10px;transition:background .2s,border-color .2s,color .2s;
+}
+.checkrow.done .box{background:var(--ink);border-color:var(--ink);color:var(--lime)}
+.checkrow .time{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--ink-4);letter-spacing:.04em}
+.checkrow.done .label{color:var(--ink-3)}
+.plan-count{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);letter-spacing:.06em}
+
+/* ---------- chat mini ---------- */
+.chat-mini{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.bubble{max-width:88%;padding:10px 13px;border-radius:16px;font-size:12.8px;line-height:1.5}
+.bubble.model{background:var(--surface-2);color:var(--ink-2);border-bottom-left-radius:5px}
+.bubble.user{background:var(--ink);color:#fff;align-self:flex-end;border-bottom-right-radius:5px}
+.chat-input{display:flex;align-items:center;gap:8px;margin-top:14px;background:var(--surface-2);border-radius:999px;padding:5px 5px 5px 14px}
+.chat-input input{
+  flex:1;min-width:0;border:0;background:none;font:inherit;font-size:12.8px;color:var(--ink);outline:none;
+}
+.chat-input input::placeholder{color:var(--ink-4)}
+.send{
+  width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--lime);
+  display:grid;place-items:center;flex:none;font-size:13px;transition:transform .2s var(--ease),background .2s;
+}
+.send:hover{transform:scale(1.06)}
+.chat-meta{display:flex;align-items:center;gap:6px;margin-top:10px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+
+/* ---------- trends ---------- */
+.trend-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-top:18px}
+.trend{min-width:0}
+.trend-head{display:flex;align-items:baseline;justify-content:flex-start;gap:8px}
+.trend-val{display:flex;align-items:baseline;gap:7px;font-size:22px;font-weight:450;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.trend-val small{font-size:10.5px;color:var(--ink-4);margin-left:-2px}
+.trend-delta{font-family:var(--font-mono);font-size:9.5px;color:var(--ink-4);letter-spacing:.04em;margin-left:2px}
+.trend-delta.up{color:#B4691D}
+.trend-delta.down{color:#3E7A34}
+.trend-chart{margin-top:10px;height:56px}
+.trend-chart svg{display:block;width:100%;height:56px;overflow:visible}
+
+/* ---------- biomarkers ---------- */
+.filterbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.seg{display:flex;gap:2px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 1px 2px rgba(15,17,15,.03)}
+.seg button{padding:7px 15px;border-radius:999px;font-size:12.5px;color:var(--ink-3);transition:background .2s,color .2s;white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button.is-active{background:var(--ink);color:#fff}
+.bio-grid{display:grid;grid-template-columns:196px minmax(0,1fr) 352px;gap:18px;align-items:start}
+.cat-card{padding:12px;position:sticky;top:96px}
+.cat-item{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  padding:11px 14px;border-radius:14px;font-size:13px;color:var(--ink-2);text-align:left;
+  transition:background .2s,color .2s;
+}
+.cat-item:hover{background:var(--surface-2)}
+.cat-item b{font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--ink-4)}
+.cat-item.is-active{background:var(--ink);color:#fff}
+.cat-item.is-active b{color:rgba(255,255,255,.55)}
+
+.list-card{padding:10px 14px 16px}
+.list-head{
+  display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.8fr) minmax(0,1.1fr) 92px;
+  gap:14px;padding:10px 12px 12px;border-bottom:1px solid var(--line);
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-5);
+}
+.list-head span:nth-child(4){text-align:right}
+.mrow{
+  display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.8fr) minmax(0,1.1fr) 92px;
+  gap:14px;align-items:center;width:100%;text-align:left;
+  padding:12px;border-radius:14px;transition:background .2s;
+}
+.mrow + .mrow{margin-top:1px}
+.mrow:hover{background:var(--surface-2)}
+.mrow.is-active{background:var(--lime-soft)}
+.mrow-name{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mrow-name b{font-size:14px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow-name span{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+.mrow-val{font-size:17px;font-weight:440;letter-spacing:-.03em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mrow-val small{font-size:10.5px;color:var(--ink-4);margin-left:3px}
+.mrow-range{min-width:0}
+.mrow-status{display:flex;justify-content:flex-end}
+.list-empty{padding:26px 12px;font-size:13px;color:var(--ink-4);text-align:center}
+
+/* detail */
+.detail{position:sticky;top:96px;padding:24px;min-height:520px;display:flex;flex-direction:column}
+.detail-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.detail-name{font-size:24px;line-height:1.15;letter-spacing:-.025em;font-weight:450;margin-top:10px;color:#fff}
+.detail-val{font-size:clamp(48px,5.6vw,62px);line-height:.9;font-weight:430;letter-spacing:-.055em;margin-top:16px;color:#fff;font-variant-numeric:tabular-nums}
+.detail-val small{font-size:14px;color:rgba(255,255,255,.5);letter-spacing:0;margin-left:6px}
+.detail-chart{margin-top:22px}
+.detail-chart svg{display:block;width:100%;height:112px;overflow:visible}
+.detail-axis{display:flex;justify-content:space-between;margin-top:6px;font-family:var(--font-mono);font-size:9px;letter-spacing:.06em;color:rgba(255,255,255,.42)}
+.detail-range{margin-top:20px}
+.detail-range .rlabel{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:8px}
+.detail-note{font-size:13px;line-height:1.55;color:rgba(255,255,255,.68);margin-top:18px}
+.detail-foot{margin-top:auto;padding-top:20px}
+.ask{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:5px 5px 5px 16px}
+.ask input{flex:1;min-width:0;background:none;border:0;outline:none;font:inherit;font-size:12.5px;color:#fff}
+.ask input::placeholder{color:rgba(255,255,255,.5)}
+.ask .send{background:var(--lime);color:var(--ink)}
+.detail-src{margin-top:12px;font-family:var(--font-mono);font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.34);display:flex;justify-content:space-between;gap:8px}
+
+/* ---------- sleep page ---------- */
+.stages{background:var(--grad-dark-2);color:#fff;padding:24px 26px 20px;overflow:hidden}
+.stages-legend{display:flex;gap:14px;align-items:center;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.stages-legend i{width:6px;height:6px;border-radius:2px;display:inline-block;margin-right:5px}
+.stage-plot{position:relative;margin-top:20px;height:258px}
+.stage-row{position:absolute;left:0;right:0;height:54px}
+.stage-block{position:absolute;top:0;height:54px;border-radius:8px;transform-origin:left center;animation:blockIn .65s var(--ease) both}
+.stage-axis{position:relative;height:16px;margin-top:14px;border-top:1px solid rgba(255,255,255,.14)}
+.stage-axis span{position:absolute;top:6px;transform:translateX(-50%);font-family:var(--font-mono);font-size:9px;letter-spacing:.05em;color:rgba(255,255,255,.45)}
+.stage-axis span:first-child{transform:none}
+.stage-axis span:last-child{transform:translateX(-100%)}
+.sleep-score{display:flex;gap:20px;align-items:center;margin-top:14px}
+.dial{position:relative;flex:none}
+.dial .dial-txt{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.dial .dial-txt b{font-size:38px;font-weight:430;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums}
+.dial .dial-txt span{font-family:var(--font-mono);font-size:9px;color:var(--ink-4);letter-spacing:.1em;text-transform:uppercase}
+.score-metrics{flex:1;display:flex;flex-direction:column;gap:11px;min-width:0}
+.score-metrics .row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding-bottom:9px;border-bottom:1px dashed var(--line);font-size:12.5px;color:var(--ink-3)}
+.score-metrics .row:last-child{border-bottom:0;padding-bottom:0}
+.score-metrics .row b{font-size:14px;color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.score-metrics .row em{font-style:normal;font-family:var(--font-mono);font-size:9.5px;color:var(--ink-4);margin-left:6px}
+.bedchart{position:relative;height:168px;margin-top:12px}
+.bedchart .axis{position:absolute;left:0;top:0;bottom:20px;width:34px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--font-mono);font-size:8.5px;color:var(--ink-4);letter-spacing:.04em}
+.bedbars{position:absolute;left:42px;right:0;top:0;bottom:20px;display:flex;justify-content:space-between;gap:7px}
+.bedbar{position:relative;flex:1}
+.bedbar i{position:absolute;width:9px;left:50%;transform:translateX(-50%);border-radius:99px;background:var(--ink);transition:background .2s}
+.bedbar.last i{background:var(--lime);box-shadow:0 0 0 3px rgba(215,244,58,.2)}
+.bedbar span{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-family:var(--font-mono);font-size:9px;color:var(--ink-4)}
+.dur-list{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.dur-item .dur-top{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ink-3)}
+.dur-item .dur-top b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.dur-track{height:6px;border-radius:99px;background:var(--surface-3);margin-top:8px;overflow:hidden}
+.dur-track i{display:block;height:100%;border-radius:99px;background:var(--ink);transform-origin:left;animation:grow .9s var(--ease) both}
+.dur-track i.lime{background:var(--lime)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.stat-grid-2{grid-template-columns:repeat(2,1fr)}
+.stat{padding:20px 22px}
+.stat .stat-label{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-4)}
+.stat .stat-val{font-size:33px;font-weight:430;letter-spacing:-.04em;line-height:1;margin-top:20px;font-variant-numeric:tabular-nums}
+.stat .stat-val small{font-size:12px;color:var(--ink-4);letter-spacing:0;margin-left:3px}
+.stat .stat-foot{font-family:var(--font-mono);font-size:9.5px;color:var(--ink-4);margin-top:9px;letter-spacing:.03em}
+.stat .stat-foot.bad{color:#B4691D}
+
+/* ---------- plan page ---------- */
+.plan-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;align-items:stretch}
+.focus{min-height:474px;display:flex;flex-direction:column;padding:24px}
+.focus-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.focus-num{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;color:var(--ink-4)}
+.card-dark .focus-num{color:rgba(255,255,255,.45)}
+.focus-title{font-size:27px;line-height:1.12;letter-spacing:-.03em;font-weight:450;margin-top:26px}
+.focus-desc{font-size:13px;line-height:1.55;color:var(--ink-3);margin-top:10px}
+.card-dark .focus-desc{color:rgba(255,255,255,.6)}
+.focus-items{display:flex;flex-direction:column;gap:6px;margin-top:auto;padding-top:22px}
+.card-dark .checkrow{color:rgba(255,255,255,.78);background:rgba(255,255,255,.07)}
+.card-dark .checkrow:hover{background:rgba(255,255,255,.12)}
+.card-dark .checkrow.done{background:rgba(215,244,58,.14);color:#fff}
+.card-dark .checkrow .box{border-color:rgba(255,255,255,.28);color:transparent}
+.card-dark .checkrow.done .box{background:var(--lime);border-color:var(--lime);color:var(--ink)}
+.card-dark .checkrow.done .label{color:rgba(255,255,255,.9)}
+.focus-target{display:flex;justify-content:space-between;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-3)}
+.card-dark .focus-target{border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.55)}
+.focus-target b{color:var(--ink);font-weight:500}
+.card-dark .focus-target b{color:#fff}
+.ring-lg{width:44px;height:44px;flex:none;position:relative}
+.ring-lg svg{display:block}
+.ring-lg span{position:absolute;inset:0;display:grid;place-content:center;font-family:var(--font-mono);font-size:9px;letter-spacing:.03em}
+.today-card{min-height:300px}
+.today-list{display:flex;flex-direction:column;gap:4px;margin-top:12px}
+.supp-card{min-height:210px}
+.supp-row{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.supp-row:last-child{border-bottom:0;padding-bottom:0}
+.supp-row .supp-name{font-size:13.5px;font-weight:500;color:#fff}
+.supp-row .supp-dose{font-size:11px;color:rgba(255,255,255,.5);margin-top:3px}
+.supp-row .pills{margin-left:auto;display:flex;gap:3px;align-items:center}
+.supp-row .pills i{width:4px;height:15px;border-radius:99px;background:rgba(255,255,255,.18)}
+.supp-row .pills i.on{background:var(--lime)}
+
+/* ---------- care / local chat ---------- */
+.care-grid{display:grid;grid-template-columns:280px minmax(0,1fr) 330px;gap:18px;align-items:start}
+.thread-card{padding:12px;position:sticky;top:96px;min-height:640px}
+.thread{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;border-radius:16px;text-align:left;transition:background .2s,color .2s}
+.thread:hover{background:var(--surface-2)}
+.thread.is-active{background:var(--ink);color:#fff}
+.thread .tavatar{
+  width:34px;height:34px;border-radius:50%;background:var(--surface-3);flex:none;display:grid;place-items:center;
+  font-family:var(--font-mono);font-size:10px;color:var(--ink-3);letter-spacing:.02em;
+}
+.thread.is-active .tavatar{background:rgba(255,255,255,.14);color:#fff}
+.thread .tbody{min-width:0;flex:1}
+.thread .tbody b{display:block;font-size:12.8px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread .tbody span{display:block;font-size:11px;color:var(--ink-4);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread.is-active .tbody span{color:rgba(255,255,255,.55)}
+.thread .dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex:none}
+.chat-card{padding:24px 24px 20px;display:flex;flex-direction:column;min-height:640px}
+.chat-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.chat-head .who{display:flex;flex-direction:column;gap:3px}
+.chat-head .who b{font-size:16px;font-weight:500;letter-spacing:-.015em}
+.chat-head .who span{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4)}
+.chat-log{display:flex;flex-direction:column;gap:14px;padding:22px 0;flex:1}
+.chat-day{align-self:center;font-family:var(--font-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-5)}
+.msg{display:flex;flex-direction:column;gap:5px;max-width:80%}
+.msg .bubble{max-width:100%;font-size:13.3px;line-height:1.55;padding:11px 15px;border-radius:18px}
+.msg.model{align-self:flex-start}
+.msg.user{align-self:flex-end;align-items:flex-end}
+.msg.user .bubble{background:var(--ink);color:#fff;border-bottom-right-radius:6px}
+.msg.model .bubble{background:var(--surface-2);color:var(--ink-2);border-bottom-left-radius:6px}
+.msg .stamp{font-family:var(--font-mono);font-size:9px;color:var(--ink-5);letter-spacing:.04em;padding:0 4px}
+.msg-card{
+  align-self:flex-start;background:var(--ink);color:#fff;border-radius:18px;padding:14px 16px;
+  display:flex;align-items:center;gap:14px;max-width:88%;
+}
+.msg-card .mc-l{display:flex;flex-direction:column;gap:4px}
+.msg-card .mc-l b{font-size:13.5px;font-weight:500}
+.msg-card .mc-l span{font-family:var(--font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5)}
+.msg-card .mc-v{font-size:22px;font-weight:430;letter-spacing:-.04em;margin-left:8px;font-variant-numeric:tabular-nums}
+.msg-card .mc-v small{font-size:10px;color:rgba(255,255,255,.5);margin-left:2px}
+.msg-card .chip-low{background:var(--blush);color:var(--blush-ink)}
+.typing{display:flex;gap:4px;align-items:center;padding:12px 15px;background:var(--surface-2);border-radius:18px;width:max-content}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--ink-4);animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}
+.typing i:nth-child(3){animation-delay:.3s}
+.chat-foot{border-top:1px solid var(--line);padding-top:16px}
+.chat-form{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:999px;padding:6px 6px 6px 18px}
+.chat-form input{flex:1;min-width:0;border:0;background:none;outline:none;font:inherit;font-size:13.5px;color:var(--ink)}
+.chat-form input::placeholder{color:var(--ink-4)}
+.chat-form .send{width:38px;height:38px;font-size:14px}
+.chat-note{display:flex;align-items:center;gap:6px;margin-top:10px;font-family:var(--font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+.model-card{overflow:hidden}
+.model-card .model-name{font-size:22px;letter-spacing:-.025em;font-weight:450;margin-top:12px;color:#fff}
+.model-card .kv{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.09);font-size:12.5px;color:rgba(255,255,255,.6)}
+.model-card .kv:last-child{border-bottom:0;padding-bottom:0}
+.model-card .kv b{font-family:var(--font-mono);font-size:11px;font-weight:500;color:#fff;letter-spacing:.02em}
+.booking-card{padding:22px 22px 20px}
+.daychips{display:flex;gap:6px;margin-top:14px}
+.daychip{
+  flex:1;padding:9px 4px;border-radius:13px;background:var(--surface-2);text-align:center;
+  display:flex;flex-direction:column;gap:3px;transition:background .2s,color .2s;
+}
+.daychip span{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+.daychip b{font-size:15px;font-weight:450;letter-spacing:-.02em}
+.daychip.is-active{background:var(--ink);color:#fff}
+.daychip.is-active span{color:rgba(255,255,255,.55)}
+.daychip.is-plain{flex-direction:row;align-items:center;justify-content:center;padding:12px 4px}
+.daychip.is-plain b{font-size:13px;font-weight:450;letter-spacing:0}
+.slotgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.slotchip{padding:9px 4px;border-radius:11px;background:var(--surface-2);font-family:var(--font-mono);font-size:10.5px;color:var(--ink-2);transition:background .2s,color .2s}
+.slotchip:hover{background:var(--surface-3)}
+.slotchip.is-active{background:var(--lime);color:var(--ink)}
+.slotchip[disabled]{opacity:.4;cursor:not-allowed}
+.booking-card .btn{width:100%;margin-top:16px}
+
+/* ---------- 404 ---------- */
+.notfound{min-height:calc(100vh - 190px);display:grid;place-items:center;padding:30px 0 60px}
+.nf-card{
+  width:min(620px,100%);text-align:center;padding:62px 40px 54px;border-radius:36px;
+  background:radial-gradient(120% 120% at 50% 120%,#7E8C3D 0%,#3E4623 34%,#1A1D13 66%,#101208 100%);
+  color:#fff;box-shadow:var(--shadow-dark);
+}
+.nf-card .nf-404{font-size:clamp(72px,12vw,120px);line-height:1;letter-spacing:-.06em;font-weight:380;margin:20px 0 12px;color:#fff}
+.nf-card p{color:rgba(255,255,255,.66);font-size:14px}
+.nf-card .btn{margin-top:26px}
+
+/* ---------- footer + toast ---------- */
+.footer{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  padding:26px 0 34px;margin-top:14px;border-top:1px solid var(--line);
+  font-size:11.5px;color:var(--ink-4);
+}
+.footer .f-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.footer .f-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase}
+.footer a:hover{color:var(--ink)}
+.toast{
+  position:fixed;left:50%;bottom:28px;transform:translate(-50%,16px);z-index:200;
+  background:rgba(15,17,15,.94);color:#fff;border-radius:999px;padding:12px 20px;
+  font-size:13px;display:flex;align-items:center;gap:10px;opacity:0;pointer-events:none;
+  transition:opacity .3s var(--ease),transform .3s var(--ease);max-width:calc(100vw - 40px);
+  box-shadow:0 20px 40px -20px rgba(0,0,0,.5);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast b{color:var(--lime);font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.tabbar{display:none}
+
+/* ---------- animations ---------- */
+.reveal{opacity:0}
+.page.is-active .reveal{animation:rise .72s var(--ease) forwards;animation-delay:var(--d,0ms)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes blockIn{from{opacity:0;transform:scaleX(.2)}to{opacity:1;transform:scaleX(1)}}
+@keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.2s .2s cubic-bezier(.35,0,.2,1) forwards}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;animation-delay:0ms !important;transition-duration:.001ms !important}
+  .reveal{opacity:1}
+}
+
+/* ---------- responsive ---------- */
+@media (max-width:1180px){
+  .bio-grid{grid-template-columns:170px minmax(0,1fr) 320px}
+  .care-grid{grid-template-columns:240px minmax(0,1fr) 300px}
+}
+@media (max-width:1080px){
+  .span-4{grid-column:span 6}
+  .bio-grid{grid-template-columns:minmax(0,1fr) 330px}
+  .cat-card{grid-column:1 / -1;position:static;display:flex;overflow-x:auto;padding:8px;gap:4px}
+  .cat-card .cat-item{width:auto;white-space:nowrap;gap:8px}
+  .care-grid{grid-template-columns:minmax(0,1fr) 300px}
+  .thread-card{grid-column:1 / -1;position:static;display:flex;overflow-x:auto;gap:6px;padding:8px;min-height:0;align-items:center}
+  .thread-card .thread{width:auto;min-width:200px;flex:none}
+  .plan-grid{grid-template-columns:repeat(2,1fr)}
+  .plan-grid .stack{grid-column:span 2;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .pred-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+  .pred-brief{grid-column:1 / -1;border-left:0;border-top:1px solid var(--line);padding-left:0;padding-top:18px}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .trend-grid{grid-template-columns:repeat(2,1fr);gap:20px}
+}
+@media (max-width:820px){
+  .wrap{padding:0 18px}
+  .nav{padding:8px 8px 8px 12px;gap:10px}
+  .tabs{display:none}
+  .nav-right .user{display:none}
+  .nav-right{margin-left:auto}
+  .nav-right .btn{height:38px;padding:0 15px;font-size:12.5px}
+  .page-head{margin:20px 0 18px}
+  .display .dim{display:block}
+  .head-row{flex-direction:column;align-items:flex-start;gap:14px}
+  .head-stats{width:100%;justify-content:space-between;gap:12px;padding:0}
+  .hstat b{font-size:22px}
+  .span-4,.span-5,.span-7,.span-8{grid-column:span 12}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .pred-grid{grid-template-columns:1fr}
+  .pred-basis{padding-top:0}
+  .pred-brief{border-top:1px solid var(--line);padding-top:18px}
+  .bio-grid{grid-template-columns:1fr}
+  .detail{position:static;min-height:0;order:3}
+  .list-head{grid-template-columns:minmax(0,1.5fr) minmax(0,.9fr) 86px}
+  .list-head span:nth-child(3){display:none}
+  .mrow{grid-template-columns:minmax(0,1.5fr) minmax(0,.9fr) 86px;gap:10px}
+  .mrow-range{display:none}
+  .care-grid{grid-template-columns:1fr}
+  .chat-card{min-height:0}
+  .chat-log{max-height:none}
+  .plan-grid{grid-template-columns:repeat(2,1fr)}
+  .plan-grid .stack{grid-column:span 2;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .focus{min-height:0}
+  .sleep-score{flex-direction:column;align-items:flex-start;gap:16px}
+  .score-metrics{width:100%}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .footer{flex-direction:column;align-items:flex-start;padding-bottom:96px}
+  .tabbar{
+    display:flex;position:fixed;left:10px;right:10px;bottom:10px;z-index:120;
+    background:rgba(255,255,255,.9);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.8);
+    border-radius:22px;padding:6px;box-shadow:0 18px 40px -22px rgba(15,17,15,.6);
+  }
+  .tabbar a{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:16px;
+    font-size:9.5px;color:var(--ink-4);letter-spacing:.02em;transition:background .2s,color .2s;
+  }
+  .tabbar a svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5}
+  .tabbar a.is-active{background:var(--ink);color:#fff}
+  .toast{bottom:88px}
+}
+@media (max-width:600px){
+  .alert{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:start;padding:14px 16px}
+  .alert .alert-dot{grid-row:1}
+  .alert .alert-copy{grid-column:2;font-size:12.5px}
+  .alert .link{grid-column:2;margin-left:0;justify-self:start;font-size:12px}
+  .plan-grid{grid-template-columns:1fr}
+  .plan-grid .stack{grid-column:span 1;grid-template-columns:1fr}
+  .focus{min-height:0}
+  .pred-score{min-height:0}
+}
+@media (max-width:480px){
+  .display{font-size:30px}
+  .card{padding:20px;border-radius:26px}
+  .pred-score{padding:16px}
+  .pred-num{font-size:56px}
+  .tiles{gap:8px}
+  .trend-grid{grid-template-columns:1fr}
+  .daychips{gap:4px}
+  .slotgrid{grid-template-columns:repeat(2,1fr)}
+  .tile-val{font-size:26px}
+  .mrow-val{font-size:15px}
+  .focus-title{font-size:23px}
+  .nf-card{padding:44px 22px 40px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="nav-wrap">
+  <div class="wrap">
+    <header class="nav">
+      <a class="brand" href="#/overview" aria-label="WatchHealth-LSTM 总览">
+        <span class="brand-mark">W</span>
+        <span class="brand-name">WatchHealth-LSTM</span>
+      </a>
+      <nav class="tabs" aria-label="主导航">
+        <a class="tab is-active" href="#/overview" data-route="overview">总览</a>
+        <a class="tab" href="#/biomarkers" data-route="biomarkers">指标</a>
+        <a class="tab" href="#/sleep" data-route="sleep">睡眠</a>
+        <a class="tab" href="#/plan" data-route="plan">计划</a>
+        <a class="tab" href="#/care" data-route="care">本地模型</a>
+      </nav>
+      <div class="nav-right">
+        <span class="user"><span class="avatar">5</span>测试用户 #5</span>
+        <button class="btn btn-dark" id="navPredict">生成明日预测</button>
+      </div>
+    </header>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ============ OVERVIEW ============ -->
+  <section class="page is-active" id="page-overview" data-page="overview">
+    <div class="page-head">
+      <div class="eyebrow"><span class="dot-live"></span>测试用户 #5 · 最近 14 天 · 模型训练时未见过该用户</div>
+      <div class="head-row">
+        <h1 class="display">早上好，主人。<span class="dim">明天怕是有点难。</span></h1>
+        <div class="head-stats">
+          <div class="hstat"><b>17</b><span><i style="background:var(--ink-4)"></i>指标</span></div>
+          <div class="hstat"><b>5</b><span><i style="background:var(--lime)"></i>达标</span></div>
+          <div class="hstat"><b>6</b><span><i style="background:var(--sand)"></i>需关注</span></div>
+          <div class="hstat"><b>6</b><span><i style="background:var(--blush)"></i>偏低</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <article class="card span-7 reveal" style="--d:40ms">
+        <div class="card-head">
+          <div>
+            <div class="mono">重点关注</div>
+            <h2 class="h2" style="margin-top:6px">需要关注的指标</h2>
+            <p class="card-sub">来自最近 14 天的数据面板，对照每项的最佳范围。</p>
+          </div>
+          <a class="card-link" href="#/biomarkers">全部 17 项</a>
+        </div>
+        <div class="tiles" id="tiles"></div>
+      </article>
+
+      <article class="card card-dark bioage span-5 reveal" style="--d:90ms">
+        <div class="card-head">
+          <div class="mono">生物学年龄</div>
+          <span class="chip chip-glass">示例数据</span>
+        </div>
+        <p class="body-sm" style="margin-top:10px;max-width:30ch">占位模块：正式版将用静息心率、心率变异性与深睡估算。</p>
+        <div class="bio-num">21.8<small>岁</small></div>
+        <div class="bio-scale">
+          <div class="bio-ticks" id="bioTicks"></div>
+        </div>
+        <div class="bio-labels"><span>18</span><span>20</span><span>22</span><span>24</span><span>26</span></div>
+      </article>
+
+      <div class="alert span-12 reveal" style="--d:120ms">
+        <span class="alert-dot">!</span>
+        <span class="alert-copy"><b>心率变异性异常预警</b>23.7 毫秒，比个人基线 46.4 毫秒低 49%，已连续两天低于预警阈值。</span>
+        <a class="link" href="#/biomarkers">查看心率变异性趋势 →</a>
+      </div>
+
+      <article class="card pred span-12 reveal" style="--d:140ms">
+        <div class="pred-top">
+          <div>
+            <div class="mono">明日 · 模型回归输出</div>
+            <h2 class="h2" style="margin-top:6px">明日状态预测</h2>
+          </div>
+          <div class="pred-actions">
+            <span class="chip chip-lime-soft">示例数据</span>
+            <button class="btn btn-ghost btn-sm" id="refreshPred" type="button">刷新预测</button>
+          </div>
+        </div>
+        <div class="pred-grid">
+          <div class="pred-score">
+            <div>
+              <div class="pred-label">预测压力</div>
+              <div class="pred-num">8.5<span>/10</span></div>
+              <div class="pred-tags"><span class="chip chip-watch">压力偏高</span><span class="chip chip-plain">疲劳 7.6</span></div>
+            </div>
+            <div class="pred-vs"><span class="ok">✓</span>次日真实自评 <b>8.5</b> · 误差 0.03 · 平均绝对误差 0.73</div>
+          </div>
+          <div class="pred-basis">
+            <div class="mono">依据</div>
+            <div class="basis-list" id="basisList"></div>
+          </div>
+          <div class="pred-brief">
+            <div class="mono">模型简报</div>
+            <p class="quote">主人，最近压力有点大（8.5/10），心率变异性也在持续下降，今晚早点睡，别再熬夜了。如果持续不舒服，记得去校医院看看。</p>
+            <div class="brief-src">本地模板生成 · 无网络请求</div>
+            <div class="brief-cta"><a class="link" href="#/care">继续在对话里追问 →</a></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card span-4 reveal" style="--d:180ms">
+        <div class="card-head">
+          <div>
+            <div class="mono">昨夜睡眠</div>
+            <h2 class="h2" style="margin-top:6px">睡眠与恢复</h2>
+          </div>
+          <span class="chip chip-watch">深睡不足</span>
+        </div>
+        <p class="card-sub">23:12 – 04:54 · 5 小时 42 分 · 示例</p>
+        <div class="sleep-mini">
+          <div class="ring" id="ringMini"></div>
+          <div class="weekbars" id="weekBars"></div>
+        </div>
+        <div class="sleep-foot"><span>恢复指数 <b>34</b>/100</span><a class="link" href="#/sleep">睡眠详情 →</a></div>
+      </article>
+
+      <article class="card span-4 reveal" style="--d:220ms">
+        <div class="card-head">
+          <div>
+            <div class="mono">今日计划</div>
+            <h2 class="h2" style="margin-top:6px">今日清单</h2>
+          </div>
+          <span class="plan-count" id="planMiniCount">2/5</span>
+        </div>
+        <div class="today-list" id="planMini"></div>
+        <a class="link" href="#/plan" style="display:inline-block;margin-top:16px">查看完整计划 →</a>
+      </article>
+
+      <article class="card span-4 reveal" style="--d:260ms">
+        <div class="card-head">
+          <div>
+            <div class="mono">本地模型</div>
+            <h2 class="h2" style="margin-top:6px">本地模型</h2>
+          </div>
+          <span class="chip chip-lime-soft">本机</span>
+        </div>
+        <div class="chat-mini">
+          <div class="bubble model">主人，昨晚心率变异性掉到 23.7 毫秒，是这 14 天最低；明天压力预测 8.5/10。</div>
+          <div class="bubble user">那我明天该怎么安排？</div>
+          <div class="bubble model">今晚 23:10 上床，明早用 20 分钟过一遍关键词就好。</div>
+        </div>
+        <form class="chat-input" data-chat="mini">
+          <input type="text" placeholder="问本地模型…" aria-label="输入消息" autocomplete="off">
+          <button class="send" type="submit" aria-label="发送">↑</button>
+        </form>
+        <div class="chat-meta"><span class="dot-live"></span>本地推理 · 对话逻辑待接入</div>
+      </article>
+
+      <article class="card span-12 reveal" style="--d:300ms">
+        <div class="card-head">
+          <div>
+            <div class="mono">最近 14 天</div>
+            <h2 class="h2" style="margin-top:6px">14 天趋势</h2>
+          </div>
+          <span class="mono">数据源：演示接口</span>
+        </div>
+        <div class="trend-grid" id="trendGrid"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ BIOMARKERS ============ -->
+  <section class="page" id="page-biomarkers" data-page="biomarkers">
+    <div class="page-head">
+      <div class="eyebrow"><span class="dot-live"></span>数据面板 · 最近 14 天 · 数据源：演示接口 · 测试用户 #5</div>
+      <div class="head-row">
+        <h1 class="display">17 项指标。<span class="dim">5 项达标。</span></h1>
+        <div class="mono" style="padding-bottom:8px">点击任一项查看详情与趋势</div>
+      </div>
+    </div>
+
+    <div class="filterbar">
+      <div class="seg" id="statusSeg" role="group" aria-label="按状态筛选">
+        <button type="button" data-status="All" class="is-active">全部</button>
+        <button type="button" data-status="Optimal">达标</button>
+        <button type="button" data-status="Watch">关注</button>
+        <button type="button" data-status="Low">偏低</button>
+      </div>
+      <div class="mono">状态 × 分类 · 可组合筛选</div>
+    </div>
+
+    <div class="bio-grid">
+      <aside class="card cat-card" id="catList" aria-label="指标分类"></aside>
+      <section class="card list-card">
+        <div class="list-head" aria-hidden="true">
+          <span>指标</span><span>数值</span><span>最佳范围</span><span>状态</span>
+        </div>
+        <div id="markerList"></div>
+      </section>
+      <aside class="card card-dark detail" id="markerDetail" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <!-- ============ SLEEP ============ -->
+  <section class="page" id="page-sleep" data-page="sleep">
+    <div class="page-head">
+      <div class="eyebrow"><span class="dot-live"></span>昨夜 · 23:12 – 04:54 · 示例数据</div>
+      <div class="head-row">
+        <h1 class="display">5 小时 42 分。<span class="dim">深睡少了 34 分钟。</span></h1>
+        <div class="daychips" id="weekStrip" style="width:min(430px,100%)"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="span-7 stack">
+        <article class="card card-dark stages reveal" style="--d:40ms">
+          <div class="card-head">
+            <div>
+              <div class="mono">昨夜结构</div>
+              <h2 class="h2" style="margin-top:6px;color:#fff">睡眠阶段</h2>
+            </div>
+            <div class="stages-legend">
+              <span><i style="background:#fff"></i>清醒</span>
+              <span><i style="background:#D7F43A"></i>快速眼动</span>
+              <span><i style="background:#8FD94E"></i>浅睡</span>
+              <span><i style="background:#DCDCD5"></i>深睡</span>
+            </div>
+          </div>
+          <div class="stage-plot" id="stagePlot"></div>
+          <div class="stage-axis" id="stageAxis"></div>
+        </article>
+
+        <div class="stat-grid stat-grid-2 reveal" style="--d:200ms">
+          <article class="card stat">
+            <div class="stat-label">深睡</div>
+            <div class="stat-val">47<small>分钟</small></div>
+            <div class="stat-foot bad">比目标少 34 分钟</div>
+          </article>
+          <article class="card stat">
+            <div class="stat-label">快速眼动</div>
+            <div class="stat-val">39<small>分钟</small></div>
+            <div class="stat-foot bad">比目标少 31 分钟</div>
+          </article>
+          <article class="card stat">
+            <div class="stat-label">静息心率</div>
+            <div class="stat-val">76<small>次/分</small></div>
+            <div class="stat-foot bad">比基线高 6 次/分</div>
+          </article>
+          <article class="card stat">
+            <div class="stat-label">心率变异性</div>
+            <div class="stat-val">23.7<small>毫秒</small></div>
+            <div class="stat-foot bad">比基线低 49%</div>
+          </article>
+        </div>
+      </div>
+
+      <div class="span-5 stack">
+        <article class="card reveal" style="--d:90ms">
+          <div class="card-head">
+            <div>
+              <div class="mono">昨夜评分</div>
+              <h2 class="h2" style="margin-top:6px">睡眠评分</h2>
+            </div>
+            <span class="chip chip-watch">低于目标</span>
+          </div>
+          <div class="sleep-score">
+            <div class="dial" id="scoreDial"></div>
+            <div class="score-metrics">
+              <div class="row"><span>睡眠时长</span><span><b>5 小时 42 分</b><em>−2 小时 18 分</em></span></div>
+              <div class="row"><span>睡眠效率</span><span><b>88%</b><em>一般</em></span></div>
+              <div class="row"><span>入睡耗时</span><span><b>26 分钟</b><em>偏长</em></span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card reveal" style="--d:140ms">
+          <div class="card-head">
+            <div>
+              <div class="mono">就寝时间</div>
+              <h3 class="h3" style="margin-top:6px">就寝与起床</h3>
+            </div>
+            <span class="mono">近 7 晚</span>
+          </div>
+          <div class="bedchart" id="bedChart"></div>
+        </article>
+
+        <article class="card reveal" style="--d:190ms">
+          <div class="card-head">
+            <div>
+              <div class="mono">和目标比</div>
+              <h3 class="h3" style="margin-top:6px">对照目标</h3>
+            </div>
+          </div>
+          <div class="dur-list" id="durList"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PLAN ============ -->
+  <section class="page" id="page-plan" data-page="plan">
+    <div class="page-head">
+      <div class="eyebrow"><span class="dot-live"></span>计划 · 示例数据 · 由预测结果整理</div>
+      <div class="head-row">
+        <h1 class="display">三个重点。<span class="dim">每天一小步。</span></h1>
+        <div class="mono" style="padding-bottom:8px">下次复盘：待排期</div>
+      </div>
+    </div>
+
+    <div class="plan-grid">
+      <article class="card card-dark focus reveal" style="--d:40ms" data-focus="1">
+        <div class="focus-top">
+          <span class="focus-num">01</span>
+          <span class="ring-lg" data-ring="1"></span>
+        </div>
+        <h2 class="focus-title">稳住心率变异性</h2>
+        <p class="focus-desc">心率变异性 23.7 毫秒，比个人基线低 49%。今天先做低成本恢复，不加练。</p>
+        <div class="focus-items" data-items="1"></div>
+        <div class="focus-target"><span>目标</span><b>心率变异性 ≥ 38 毫秒</b></div>
+      </article>
+
+      <article class="card focus reveal" style="--d:90ms" data-focus="2">
+        <div class="focus-top">
+          <span class="focus-num">02</span>
+          <span class="ring-lg" data-ring="2"></span>
+        </div>
+        <h2 class="focus-title">补回深睡</h2>
+        <p class="focus-desc">深睡只有 47 分钟，比目标少 34 分钟。把就寝时间前移，比任何补剂都有效。</p>
+        <div class="focus-items" data-items="2"></div>
+        <div class="focus-target"><span>目标</span><b>深睡 ≥ 80 分钟</b></div>
+      </article>
+
+      <article class="card focus reveal" style="--d:140ms" data-focus="3">
+        <div class="focus-top">
+          <span class="focus-num">03</span>
+          <span class="ring-lg" data-ring="3"></span>
+        </div>
+        <h2 class="focus-title">期末周低负担运动</h2>
+        <p class="focus-desc">久坐 824 分钟，是 14 天最高。用碎片活动替代一次高强度训练。</p>
+        <div class="focus-items" data-items="3"></div>
+        <div class="focus-target"><span>目标</span><b>活动分钟 ≥ 45 分钟</b></div>
+      </article>
+
+      <div class="stack">
+        <article class="card today-card reveal" style="--d:190ms">
+          <div class="card-head">
+            <div>
+              <div class="mono">今天</div>
+              <h2 class="h2" style="margin-top:6px">今日清单</h2>
+            </div>
+            <span class="plan-count" id="todayCount">2/5</span>
+          </div>
+          <div class="today-list" id="todayList"></div>
+        </article>
+
+        <article class="card card-dark supp-card reveal" style="--d:240ms">
+          <div class="card-head">
+            <div>
+              <div class="mono">服用记录</div>
+              <h3 class="h3" style="margin-top:6px;color:#fff">补剂</h3>
+            </div>
+            <span class="chip chip-glass">示例</span>
+          </div>
+          <div id="suppList"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CARE / LOCAL MODEL ============ -->
+  <section class="page" id="page-care" data-page="care">
+    <div class="page-head">
+      <div class="eyebrow"><span class="dot-live"></span>本地模型 · 对话 · 示例数据</div>
+      <div class="head-row">
+        <h1 class="display">不用等回复。<span class="dim">模型就在这台电脑里。</span></h1>
+        <div class="head-stats">
+          <div class="hstat"><b>4</b><span><i style="background:var(--ink-4)"></i>会话</span></div>
+          <div class="hstat"><b>42<small style="font-size:12px">毫秒</small></b><span><i style="background:var(--lime)"></i>平均延迟</span></div>
+          <div class="hstat"><b>0</b><span><i style="background:var(--ink-4)"></i>网络请求</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="care-grid">
+      <aside class="card thread-card reveal" style="--d:40ms" id="threadList"></aside>
+
+      <article class="card chat-card reveal" style="--d:90ms">
+        <div class="chat-head">
+          <div class="who">
+            <b>腕上健康 · 本地模型</b>
+            <span>本地模型 · 长短期记忆网络预测 + 本地模板</span>
+          </div>
+          <span class="chip chip-lime-soft">运行中 · 本机</span>
+        </div>
+        <div class="chat-log" id="chatLog"></div>
+        <div class="chat-foot">
+          <form class="chat-form" id="chatForm">
+            <input id="chatInput" type="text" placeholder="问本地模型：明天口语考试怎么安排？" autocomplete="off" aria-label="给本地模型发消息">
+            <button class="send" type="submit" aria-label="发送">↑</button>
+          </form>
+          <div class="chat-note"><span class="dot-live"></span>对话逻辑待接入 · 预览版为示例对话</div>
+        </div>
+      </article>
+
+      <div class="stack">
+        <article class="card card-dark model-card reveal" style="--d:140ms">
+          <div class="mono">本地推理</div>
+          <div class="model-name">正在本机运行</div>
+          <div style="margin-top:16px">
+            <div class="kv"><span>状态</span><b>在线</b></div>
+            <div class="kv"><span>预测模型</span><b>长短期记忆网络 · 5.4 万参数</b></div>
+            <div class="kv"><span>推理设备</span><b>本机处理器</b></div>
+            <div class="kv"><span>平均延迟</span><b>42 毫秒</b></div>
+            <div class="kv"><span>上下文</span><b>过去 7 天</b></div>
+            <div class="kv"><span>网络</span><b>无需联网</b></div>
+          </div>
+        </article>
+
+        <article class="card booking-card reveal" style="--d:190ms">
+          <div class="mono">下次复盘</div>
+          <h3 class="h3" style="margin-top:8px">模型复盘（示例）</h3>
+          <p class="body-sm" style="margin-top:6px">每周用新数据复算一次预测与异常阈值。</p>
+          <div class="daychips" id="dayChips"></div>
+          <div class="slotgrid" id="slotGrid"></div>
+          <button class="btn btn-dark" type="button" disabled>确认时间 · 待接入</button>
+          <div class="chat-note"><span class="dot-live"></span>原型占位 · 无真实排期</div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 404 ============ -->
+  <section class="page" id="page-404" data-page="404">
+    <div class="notfound">
+      <div class="nf-card">
+        <div class="eyebrow" style="justify-content:center;color:rgba(255,255,255,.5)">404 · 页面不存在</div>
+        <div class="nf-404">404</div>
+        <p>主人，这一页不在你的健康看板里。</p>
+        <a class="btn btn-lime" href="#/overview">回到总览</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="wrap">
+  <footer class="footer">
+    <div class="f-left">
+      <span class="brand-mark" style="width:26px;height:26px;border-radius:8px;font-size:12px">W</span>
+      <span>WatchHealth-LSTM · 广州商学院 人工智能学院 · 深度学习课程项目</span>
+    </div>
+    <div class="f-right">
+      <span>预览 · 示例数据</span>
+      <a href="前端功能盘点与预览说明.md">功能盘点与说明</a>
+      <a href="#/404">404</a>
+    </div>
+  </footer>
+</div>
+
+<nav class="tabbar" aria-label="手机端导航">
+  <a href="#/overview" data-route="overview" class="is-active">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    总览
+  </a>
+  <a href="#/biomarkers" data-route="biomarkers">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V8m5 10V5m5 13v-7m5 7V9"/></svg>
+    指标
+  </a>
+  <a href="#/sleep" data-route="sleep">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+    睡眠
+  </a>
+  <a href="#/plan" data-route="plan">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
+    计划
+  </a>
+  <a href="#/care" data-route="care">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H8l-4 2 1.2-4.2A8 8 0 1 1 21 12Z"/></svg>
+    模型
+  </a>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><b>预览</b><span id="toastMsg"></span></div>
+</div>
+<script>
+/* =========================================================================
+   WatchHealth-LSTM · Mira Bio 风格静态预览
+   说明：本文件为「评审用静态预览」，所有数据为示例/占位数据，
+        标注“待接入”的交互只提供视觉呈现，不包含真实后端调用。
+   ========================================================================= */
+(function () {
+  'use strict';
+
+  /* ---------------- 1. 基础工具 ---------------- */
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const pct = (v) => Math.round(v * 1000) / 10;
+
+  let uid = 0;
+  const nextId = (p) => `${p}-${++uid}`;
+
+  const toastEl = $('#toast');
+  const toastMsg = $('#toastMsg');
+  let toastTimer;
+  function toast(msg, label = '预览') {
+    toastEl.querySelector('b').textContent = label;
+    toastMsg.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3200);
+  }
+
+  const CHIP = { Optimal: 'chip-optimal', Watch: 'chip-watch', Low: 'chip-low' };
+  const STATUS_CN = { Optimal: '达标', Watch: '关注', Low: '偏低' };
+  const chip = (status, text = STATUS_CN[status] || status) => `<span class="chip ${CHIP[status] || 'chip-inrange'}">${text}</span>`;
+
+  function fmt(v, dec = 0) {
+    if (dec === 0) return Math.round(v).toLocaleString('zh-CN');
+    return v.toFixed(dec);
+  }
+  function sign(v, dec = 1) {
+    const s = Math.abs(v).toFixed(dec);
+    return (v < 0 ? '−' : v > 0 ? '+' : '') + s;
+  }
+
+  /* ---------------- 2. 示例数据（真实窗口来自 /api/demo 的 14 天） ---------------- */
+  const DAYS = ['10/28', '10/29', '10/30', '10/31', '11/01', '11/02', '11/03',
+    '11/04', '11/05', '11/06', '11/07', '11/08', '11/09', '11/10'];
+
+  // 测试用户 #5（模型训练时未见过的用户）第 18~31 天窗口，与 backend/main.py 一致
+  const SERIES = {
+    resting_hr: [70.5, 67.0, 72.7, 67.8, 69.2, 67.5, 64.0, 72.5, 68.9, 72.5, 67.6, 68.4, 73.6, 76.4],
+    hrv_rmssd: [46.3, 43.1, 48.8, 50.8, 48.7, 37.7, 42.2, 53.0, 46.3, 44.3, 44.4, 51.5, 21.0, 23.7],
+    deep_sleep_min: [84.9, 88.0, 69.4, 72.1, 86.3, 99.5, 76.2, 74.8, 90.3, 66.7, 91.9, 97.2, 35.1, 46.7],
+    rem_min: [90.9, 81.4, 87.3, 74.3, 68.9, 83.6, 81.5, 68.9, 79.4, 67.9, 68.2, 83.2, 55.7, 38.9],
+    steps: [9770.6, 12010.8, 10798.0, 9050.7, 8352.2, 8493.0, 9174.9, 11426.1, 10074.2, 11932.2, 9805.4, 9537.7, 7741.0, 5598.0],
+    sedentary_min: [495.1, 490.3, 417.3, 474.7, 494.6, 526.2, 480.7, 450.7, 510.1, 468.3, 521.7, 535.4, 782.2, 824.2],
+    prev_stress: [3.2, 4.0, 2.2, 3.9, 2.4, 2.6, 4.1, 2.8, 3.3, 3.2, 3.3, 2.6, 2.3, 9.8]
+  };
+
+  /** 占位序列：确定性生成，保证每次打开预览看到同一张图 */
+  function synth(end, base, amp, seed) {
+    const out = [];
+    for (let i = 0; i < 14; i++) {
+      const t = i / 13;
+      const wobble = Math.sin(i * 1.7 + seed) * amp + Math.cos(i * 0.9 + seed * 2) * amp * 0.55;
+      out.push(+(base + wobble + (end - base) * Math.pow(t, 2.4)).toFixed(2));
+    }
+    out[13] = end;
+    return out;
+  }
+
+  const CATS = ['Heart', 'Sleep', 'Activity', 'Mind', 'Vitals'];
+  const CAT_CN = { Heart: '心血管', Sleep: '睡眠', Activity: '活动', Mind: '心理', Vitals: '体征' };
+
+  // 17 项指标：7 项对应后端真实字段，其余为按生理先验构造的占位项
+  const MARKERS = [
+    {
+      id: 'resting_hr', name: '静息心率', cat: 'Heart', unit: '次/分', value: 76.4, dec: 0,
+      status: 'Watch', opt: [55, 65], scale: [40, 90], series: SERIES.resting_hr, real: true,
+      note: '比 14 天均值高 6 次/分，是压力周里最早出现的信号之一。'
+    },
+    {
+      id: 'hrv_rmssd', name: '心率变异性', cat: 'Heart', unit: '毫秒', value: 23.7, dec: 1,
+      status: 'Low', opt: [45, 75], scale: [0, 100], series: SERIES.hrv_rmssd, real: true,
+      note: '个人基线 46.4 毫秒，两天内下降 49%，偏离基线 5.4 个标准差，触发异常预警。'
+    },
+    {
+      id: 'hr_recovery', name: '心率恢复', cat: 'Heart', unit: '次/分', value: 22, dec: 0,
+      status: 'Optimal', opt: [20, 40], scale: [5, 50], series: synth(22, 26, 2.4, 1.2),
+      note: '运动后 1 分钟心率下降值，刚压线达标，压力周不建议再加强度。'
+    },
+    {
+      id: 'night_hr', name: '夜间最低心率', cat: 'Heart', unit: '次/分', value: 54, dec: 0,
+      status: 'Optimal', opt: [48, 58], scale: [40, 70], series: synth(54, 53, 1.8, 2.4),
+      note: '夜间最低心率稳定，说明恢复窗口本身没有被打乱。'
+    },
+    {
+      id: 'deep_sleep_min', name: '深睡时长', cat: 'Sleep', unit: '分钟', value: 46.7, dec: 0,
+      status: 'Low', opt: [70, 110], scale: [20, 130], series: SERIES.deep_sleep_min, real: true,
+      note: '比目标少 34 分钟。深睡不足会直接抬高次日自评压力。'
+    },
+    {
+      id: 'rem_min', name: '快速眼动时长', cat: 'Sleep', unit: '分钟', value: 38.9, dec: 0,
+      status: 'Low', opt: [70, 100], scale: [20, 120], series: SERIES.rem_min, real: true,
+      note: '快速眼动时长随睡眠总时长一起缩短，情绪调节能力会跟着下降。'
+    },
+    {
+      id: 'sleep_duration', name: '睡眠时长', cat: 'Sleep', unit: '小时', value: 5.7, dec: 1,
+      status: 'Watch', opt: [7, 8.5], scale: [3, 10], series: synth(5.7, 7.2, 0.35, 3.1),
+      note: '连续三晚不足 6 小时，期末周的典型形态。'
+    },
+    {
+      id: 'sleep_efficiency', name: '睡眠效率', cat: 'Sleep', unit: '%', value: 88, dec: 0,
+      status: 'Watch', opt: [90, 97], scale: [70, 100], series: synth(88, 92, 2.2, 4.2),
+      note: '入睡耗时 26 分钟，躺下后大脑还在转。'
+    },
+    {
+      id: 'steps', name: '步数', cat: 'Activity', unit: '步', value: 5598, dec: 0,
+      status: 'Watch', opt: [8000, 12000], scale: [2000, 16000], series: SERIES.steps, real: true,
+      note: '比 14 天均值少 41%，活动量骤降往往和情绪低谷同时出现。'
+    },
+    {
+      id: 'sedentary_min', name: '久坐时长', cat: 'Activity', unit: '分钟', value: 824.2, dec: 0,
+      status: 'Low', opt: [240, 480], scale: [300, 900], series: SERIES.sedentary_min, real: true,
+      note: '14 天最高值，几乎整天坐在自习室。'
+    },
+    {
+      id: 'active_min', name: '活动分钟', cat: 'Activity', unit: '分钟', value: 48, dec: 0,
+      status: 'Optimal', opt: [45, 90], scale: [0, 120], series: synth(48, 58, 8, 5.5),
+      note: '刚好到推荐下限，散步与通勤撑起了全部活动量。'
+    },
+    {
+      id: 'stress_self', name: '自评压力', cat: 'Mind', unit: '/10', value: 9.8, dec: 1,
+      status: 'Low', opt: [1, 4], scale: [1, 10], series: SERIES.prev_stress, real: true,
+      note: '昨晚 1–10 分自评，模型正是拿这条序列做监督信号。'
+    },
+    {
+      id: 'fatigue', name: '疲劳指数', cat: 'Mind', unit: '/10', value: 7.6, dec: 1,
+      status: 'Watch', opt: [1, 4], scale: [1, 10], series: synth(7.6, 4.6, 0.7, 6.1),
+      note: '由压力预测换算（压力 × 0.9），为工程占位值。'
+    },
+    {
+      id: 'recovery', name: '恢复指数', cat: 'Mind', unit: '', value: 34, dec: 0,
+      status: 'Low', opt: [60, 100], scale: [0, 100], series: synth(34, 62, 9, 7.3),
+      note: '综合心率变异性、深睡与静息心率的恢复评分，低于 40 时建议减量。'
+    },
+    {
+      id: 'spo2', name: '血氧饱和度', cat: 'Vitals', unit: '%', value: 97, dec: 0,
+      status: 'Optimal', opt: [96, 100], scale: [90, 100], series: synth(97, 97, 0.6, 8.4),
+      note: '夜间平均血氧稳定，没有呼吸事件的迹象。'
+    },
+    {
+      id: 'resp_rate', name: '呼吸频率', cat: 'Vitals', unit: '次/分', value: 15.2, dec: 1,
+      status: 'Optimal', opt: [12, 16], scale: [8, 22], series: synth(15.2, 14.6, 0.5, 9.2),
+      note: '睡眠呼吸频率正常，排除发热与呼吸道问题的干扰。'
+    },
+    {
+      id: 'skin_temp', name: '皮肤温度偏移', cat: 'Vitals', unit: '℃', value: 0.4, dec: 1,
+      status: 'Watch', opt: [-0.2, 0.3], scale: [-1, 1], series: synth(0.4, 0.05, 0.16, 10.5),
+      note: '比个人基线高 0.4 ℃，可能是熬夜后的轻度炎症反应。'
+    }
+  ];
+
+  const markerById = (id) => MARKERS.find((m) => m.id === id);
+  const STATUS_ORDER = ['Optimal', 'Watch', 'Low'];
+  const counts = {
+    status: STATUS_ORDER.reduce((acc, s) => (acc[s] = MARKERS.filter((m) => m.status === s).length, acc), {}),
+    cat: CATS.reduce((acc, c) => (acc[c] = MARKERS.filter((m) => m.cat === c).length, acc), {})
+  };
+
+  /* ---------------- 3. SVG 构件 ---------------- */
+  const ordinal = (v) => v.toFixed(2);
+
+  /** 最佳范围小条：虚线全量 + 加粗最佳段 + 当前值刻度 */
+  function rangeSVG(m, dark) {
+    const [s0, s1] = m.scale, [o0, o1] = m.opt;
+    const x = (v) => clamp((v - s0) / (s1 - s0), 0, 1) * 100;
+    const x0 = x(o0), x1 = x(o1), xv = x(m.value);
+    const base = dark ? 'rgba(255,255,255,.3)' : 'rgba(15,17,15,.26)';
+    const opt = dark ? 'rgba(255,255,255,.78)' : 'rgba(15,17,15,.6)';
+    const tick = dark ? '#D7F43A' : '#0F110F';
+    return `<svg viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" y1="6" x2="100" y2="6" stroke="${base}" stroke-width="2.4" stroke-linecap="round"
+            stroke-dasharray="0.1 3.2" vector-effect="non-scaling-stroke"/>
+      <line x1="${ordinal(x0)}" y1="6" x2="${ordinal(x1)}" y2="6" stroke="${opt}" stroke-width="2.6"
+            stroke-linecap="round" stroke-dasharray="1 2.8" vector-effect="non-scaling-stroke"/>
+      <line x1="${ordinal(xv)}" y1="0.5" x2="${ordinal(xv)}" y2="11.5" stroke="${tick}" stroke-width="1.6"
+            stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+  }
+
+  /** 折线 + 面积 + 末点，用于趋势卡与详情卡 */
+  function lineSVG(values, w, h, color, opts) {
+    const o = Object.assign({ padX: 4, padY: 8, area: true, dots: false, dotLast: true, stroke: 2.2 }, opts || {});
+    const min = Math.min(...values), max = Math.max(...values);
+    const span = (max - min) || 1;
+    const pts = values.map((v, i) => {
+      const x = o.padX + (i * (w - o.padX * 2)) / (values.length - 1);
+      const y = o.padY + (1 - (v - min) / span) * (h - o.padY * 2);
+      return [x, y];
+    });
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(' ');
+    const areaD = `${d} L${pts[pts.length - 1][0].toFixed(2)} ${h} L${pts[0][0].toFixed(2)} ${h} Z`;
+    const gid = nextId('g');
+    const dots = o.dots
+      ? pts.slice(0, -1).map((p) => `<circle cx="${p[0].toFixed(2)}" cy="${p[1].toFixed(2)}" r="2" fill="${color}" opacity=".55"/>`).join('')
+      : '';
+    const last = pts[pts.length - 1];
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="14 天趋势">
+      <defs>
+        <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity=".26"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${o.area ? `<path d="${areaD}" fill="url(#${gid})"/>` : ''}
+      ${dots}
+      <path class="draw" pathLength="1" d="${d}" fill="none" stroke="${color}" stroke-width="${o.stroke}"
+            stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      ${o.dotLast ? `<circle cx="${last[0].toFixed(2)}" cy="${last[1].toFixed(2)}" r="3" fill="${color}" stroke="#fff" stroke-width="1.4"/>` : ''}
+    </svg>`;
+  }
+
+  /** 迷你进度环 */
+  function ringSVG(score, size, stroke, color, track, label) {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+    const dash = (score / 100) * c;
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${track}" stroke-width="${stroke}"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+        stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} ${c.toFixed(1)}"
+        transform="rotate(-90 ${size / 2} ${size / 2})" style="animation:none"/>
+    </svg>${label || ''}`;
+  }
+
+  /** 睡眠评分刻度盘 */
+  function dialSVG(score) {
+    const size = 150, c = size / 2, rOuter = c - 4, rInner = rOuter - 13, N = 60;
+    let ticks = '';
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      const on = i < Math.round((score / 100) * N);
+      ticks += `<line x1="${(c + Math.cos(a) * rInner).toFixed(1)}" y1="${(c + Math.sin(a) * rInner).toFixed(1)}"
+        x2="${(c + Math.cos(a) * rOuter).toFixed(1)}" y2="${(c + Math.sin(a) * rOuter).toFixed(1)}"
+        stroke="${on ? '#0F110F' : 'rgba(15,17,15,.13)'}" stroke-width="${on ? 2.7 : 2}" stroke-linecap="round"/>`;
+    }
+    const a = (score / 100) * Math.PI * 2 - Math.PI / 2;
+    const dot = `<circle cx="${(c + Math.cos(a) * (rInner - 5)).toFixed(1)}" cy="${(c + Math.sin(a) * (rInner - 5)).toFixed(1)}"
+      r="3.4" fill="#D7F43A"/>`;
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">${ticks}${dot}</svg>
+      <div class="dial-txt"><b>${score}</b><span>满分 100</span></div>`;
+  }
+
+  /* ---------------- 4. 总览 ---------------- */
+  const TILE_IDS = ['hrv_rmssd', 'resting_hr', 'deep_sleep_min', 'steps'];
+
+  function renderTiles() {
+    $('#tiles').innerHTML = TILE_IDS.map((id) => {
+      const m = markerById(id);
+      return `<button class="tile" type="button" data-jump="${m.id}">
+        <span class="tile-top">
+          <span class="tile-cat">${CAT_CN[m.cat]}</span>
+          ${chip(m.status)}
+        </span>
+        <span class="tile-val">${fmt(m.value, m.dec)}<small>${m.unit}</small></span>
+        <span class="tile-name">${m.name}</span>
+        <span class="tile-range">${rangeSVG(m)}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderBioAge() {
+    const ticks = [];
+    for (let i = 0; i < 40; i++) {
+      const v = 18 + (i / 39) * 8;
+      const mark = Math.abs(v - 21.8) < 0.12;
+      const on = v < 21.8 && !mark;
+      const h = mark ? 28 : on ? 8 + (v - 18) * 2.4 : 7;
+      ticks.push(`<i class="${mark ? 'mark' : on ? 'on' : ''}" style="height:${h.toFixed(0)}px"></i>`);
+    }
+    $('#bioTicks').innerHTML = ticks.join('');
+  }
+
+  const BASIS = [
+    { label: '心率变异性', value: '23.7 毫秒', note: '比基线低 49%', pct: 88, tone: 'bad' },
+    { label: '深睡时长', value: '47 分钟', note: '比均值少 31 分钟', pct: 74, tone: 'bad' },
+    { label: '静息心率', value: '76 次/分', note: '比均值高 6 次/分', pct: 66, tone: 'warn' },
+    { label: '久坐时长', value: '824 分钟', note: '14 天最高', pct: 58, tone: 'warn' }
+  ];
+
+  function renderBasis() {
+    $('#basisList').innerHTML = BASIS.map((b, i) => `
+      <div class="basis-item">
+        <div class="basis-top"><span>${b.label}</span><b>${b.value}</b></div>
+        <div class="basis-track"><i class="${b.tone}" style="width:${b.pct}%;animation-delay:${140 + i * 90}ms"></i></div>
+        <div class="mono" style="margin-top:6px;font-size:9.5px;letter-spacing:.06em">${b.note}</div>
+      </div>`).join('');
+  }
+
+  const WEEK_SCORES = [68, 72, 65, 70, 61, 52, 64];
+
+  function renderSleepMini() {
+    $('#ringMini').innerHTML = ringSVG(64, 78, 7, '#D7F43A', '#ECECEA') +
+      `<div class="ring-txt"><b>64</b><span>分</span></div>`;
+    $('#weekBars').innerHTML = WEEK_SCORES.map((s, i) => `
+      <div class="wbar ${i === WEEK_SCORES.length - 1 ? 'last' : ''}">
+        <i style="height:${Math.round(clamp((s - 42) / 36, .18, 1) * 100)}%"></i>
+        <span>${['四', '五', '六', '日', '一', '二', '三'][i]}</span>
+      </div>`).join('');
+  }
+
+  const TRENDS = [
+    { key: 'resting_hr', label: '静息心率', unit: '次/分', dec: 0, goodUp: false },
+    { key: 'hrv_rmssd', label: '心率变异性', unit: '毫秒', dec: 1, goodUp: true },
+    { key: 'deep_sleep_min', label: '深睡', unit: '分钟', dec: 0, goodUp: true },
+    { key: 'steps', label: '步数', unit: '步', dec: 0, goodUp: true }
+  ];
+
+  function renderTrends() {
+    $('#trendGrid').innerHTML = TRENDS.map((t) => {
+      const arr = SERIES[t.key];
+      const last = arr[arr.length - 1];
+      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const delta = last - avg;
+      const good = t.goodUp ? delta > 0 : delta < 0;
+      const cls = Math.abs(delta) < 0.05 ? '' : (good ? 'down' : 'up');
+      return `<div class="trend">
+        <div class="trend-head">
+          <span class="mono">${t.label}</span>
+        </div>
+        <div class="trend-val">${fmt(last, t.dec)}<small>${t.unit}</small>
+          <span class="trend-delta ${cls}">${sign(delta, t.dec === 0 ? 0 : 1)}</span>
+        </div>
+        <div class="trend-chart">${lineSVG(arr, 220, 56, '#0F110F', { padX: 2, padY: 6, dots: true })}</div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ---------------- 5. 指标页 ---------------- */
+  const filters = { status: 'All', cat: 'All' };
+  let activeMarker = 'hrv_rmssd';
+
+  function visibleMarkers() {
+    return MARKERS.filter((m) =>
+      (filters.status === 'All' || m.status === filters.status) &&
+      (filters.cat === 'All' || m.cat === filters.cat));
+  }
+
+  function renderCats() {
+    const items = [`<button type="button" class="cat-item ${filters.cat === 'All' ? 'is-active' : ''}" data-cat="All">
+        <span>全部</span><b>${MARKERS.length}</b></button>`];
+    CATS.forEach((c) => {
+      items.push(`<button type="button" class="cat-item ${filters.cat === c ? 'is-active' : ''}" data-cat="${c}">
+        <span>${CAT_CN[c]}</span><b>${counts.cat[c]}</b></button>`);
+    });
+    $('#catList').innerHTML = items.join('');
+  }
+
+  function renderMarkers() {
+    const list = visibleMarkers();
+    if (!list.length) {
+      $('#markerList').innerHTML = `<div class="list-empty">这个组合下没有指标 —— 换一个状态或分类试试。</div>`;
+      return;
+    }
+    $('#markerList').innerHTML = list.map((m) => `
+      <button type="button" class="mrow ${m.id === activeMarker ? 'is-active' : ''}" data-marker="${m.id}">
+        <span class="mrow-name"><b>${m.name}</b><span>${CAT_CN[m.cat]}</span></span>
+        <span class="mrow-val">${fmt(m.value, m.dec)}<small>${m.unit}</small></span>
+        <span class="mrow-range">${rangeSVG(m)}</span>
+        <span class="mrow-status">${chip(m.status)}</span>
+      </button>`).join('');
+  }
+
+  function optText(m) {
+    const f = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(Math.max(1, m.dec))).replace('-', '−');
+    return `${f(m.opt[0])}–${f(m.opt[1])}`;
+  }
+
+  function renderDetail(id) {
+    const m = markerById(id) || markerById('hrv_rmssd');
+    const val = `${m.id === 'skin_temp' ? sign(m.value, m.dec) : fmt(m.value, m.dec)}<small>${m.unit}</small>`;
+    $('#markerDetail').innerHTML = `
+      <div class="detail-top">
+        <span class="mono">${CAT_CN[m.cat]}</span>
+        ${chip(m.status)}
+      </div>
+      <div class="detail-name">${m.name}</div>
+      <div class="detail-val">${val}</div>
+      <div class="detail-chart">
+        ${lineSVG(m.series, 320, 112, '#D7F43A', { padX: 6, padY: 10, dotLast: true })}
+        <div class="detail-axis"><span>第 1 天</span><span>第 7 天</span><span>第 14 天</span></div>
+      </div>
+      <div class="detail-range">
+        <div class="rlabel"><span>最佳范围</span><span>${optText(m)} ${m.unit}</span></div>
+        ${rangeSVG(m, true)}
+      </div>
+      <p class="detail-note">${m.note}</p>
+      <div class="detail-foot">
+        <form class="ask" data-ask="${m.id}">
+          <input type="text" placeholder="问本地模型关于这一项…" aria-label="询问本地模型">
+          <button class="send" type="submit" aria-label="发送">↑</button>
+        </form>
+        <div class="detail-src"><span>${m.real ? '演示数据 · 真实窗口' : '占位序列 · 待接入'}</span><span>示例数据</span></div>
+      </div>`;
+  }
+
+  /* ---------------- 6. 睡眠页 ---------------- */
+  const SLEEP_TOTAL = 342; // 5h42m
+  const SLEEP_FIXED = [
+    { s: 'deep', start: 40, dur: 24 },
+    { s: 'rem', start: 82, dur: 20 },
+    { s: 'deep', start: 128, dur: 15 },
+    { s: 'rem', start: 185, dur: 19 },
+    { s: 'awake', start: 228, dur: 12 },
+    { s: 'deep', start: 286, dur: 8 }
+  ];
+  const STAGE_COLOR = { awake: '#FFFFFF', rem: '#D7F43A', light: '#8FD94E', deep: '#DCDCD5' };
+  const STAGE_ROW = { awake: 0, rem: 1, light: 2, deep: 3 };
+  const STAGE_CN = { awake: '清醒', rem: '快速眼动', light: '浅睡', deep: '深睡' };
+
+  function sleepBlocks() {
+    const out = [];
+    let cursor = 0;
+    SLEEP_FIXED.slice().sort((a, b) => a.start - b.start).forEach((b) => {
+      if (b.start > cursor) out.push({ s: 'light', start: cursor, dur: b.start - cursor });
+      out.push(b);
+      cursor = b.start + b.dur;
+    });
+    if (cursor < SLEEP_TOTAL) out.push({ s: 'light', start: cursor, dur: SLEEP_TOTAL - cursor });
+    return out;
+  }
+
+  function renderStages() {
+    const blocks = sleepBlocks();
+    $('#stagePlot').innerHTML = blocks.map((b, i) => {
+      const left = (b.start / SLEEP_TOTAL) * 100;
+      const w = (b.dur / SLEEP_TOTAL) * 100;
+      return `<div class="stage-row" style="top:${STAGE_ROW[b.s] * 68}px">
+        <div class="stage-block" title="${STAGE_CN[b.s]} · ${b.dur} 分钟"
+          style="left:calc(${left.toFixed(2)}% + 2px);width:calc(${w.toFixed(2)}% - 4px);
+                 background:${STAGE_COLOR[b.s]};animation-delay:${i * 32}ms"></div>
+      </div>`;
+    }).join('');
+
+    const labels = [[0, '23:00'], [60, '00:00'], [120, '01:00'], [180, '02:00'], [240, '03:00'], [300, '04:00']];
+    $('#stageAxis').innerHTML = labels.map(([t, l]) =>
+      `<span style="left:${((t / SLEEP_TOTAL) * 100).toFixed(2)}%">${l}</span>`).join('');
+  }
+
+  function renderSleepPage() {
+    $('#scoreDial').innerHTML = dialSVG(64);
+    $('#weekStrip').innerHTML = [
+      ['四', 68], ['五', 72], ['六', 65], ['日', 70],
+      ['一', 61], ['二', 52], ['三', 64]
+    ].map(([d, s], i, arr) =>
+      `<div class="daychip ${i === arr.length - 1 ? 'is-active' : ''}"><span>${d}</span><b>${s}</b></div>`).join('');
+
+    // 就寝 / 起床：0 = 22:00，600 = 08:00
+    const nights = [
+      { bed: 100, wake: 550 }, { bed: 65, wake: 535 }, { bed: 115, wake: 565 },
+      { bed: 80, wake: 520 }, { bed: 135, wake: 545 }, { bed: 185, wake: 580 },
+      { bed: 72, wake: 414 }
+    ];
+    const days = ['四', '五', '六', '日', '一', '二', '三'];
+    $('#bedChart').innerHTML = `
+      <div class="axis"><span>22:00</span><span>02:00</span><span>06:00</span></div>
+      <div class="bedbars">${nights.map((n, i) => `
+        <div class="bedbar ${i === nights.length - 1 ? 'last' : ''}">
+          <i style="top:${((n.bed / 600) * 100).toFixed(1)}%;height:${(((n.wake - n.bed) / 600) * 100).toFixed(1)}%"></i>
+          <span>${days[i]}</span>
+        </div>`).join('')}</div>`;
+
+    const durs = [
+      { label: '睡眠时长', value: '5 小时 42 分', target: '8 小时', pct: 71, lime: false },
+      { label: '深睡', value: '47 分钟', target: '80 分钟', pct: 59, lime: false },
+      { label: '睡眠效率', value: '88%', target: '97%', pct: 91, lime: false },
+      { label: '恢复感', value: '34', target: '100', pct: 34, lime: true }
+    ];
+    $('#durList').innerHTML = durs.map((d, i) => `
+      <div class="dur-item">
+        <div class="dur-top"><span>${d.label}</span><span><b>${d.value}</b> / ${d.target}</span></div>
+        <div class="dur-track"><i class="${d.lime ? 'lime' : ''}" style="width:${d.pct}%;animation-delay:${120 + i * 80}ms"></i></div>
+      </div>`).join('');
+  }
+
+  /* ---------------- 7. 计划页 ---------------- */
+  const FOCUS = {
+    1: [
+      { t: '10 分钟腹式呼吸', time: '12:30', done: true },
+      { t: '午后散步 15 分钟', time: '15:00', done: true },
+      { t: '不加练、不做高强度间歇', time: '今晚', done: false }
+    ],
+    2: [
+      { t: '23:10 前上床', time: '23:10', done: true },
+      { t: '咖啡因 14:00 前结束', time: '14:00', done: true },
+      { t: '卧室 18℃、遮光', time: '22:30', done: true },
+      { t: '睡前不刷短视频', time: '23:00', done: false }
+    ],
+    3: [
+      { t: '每小时起身 2 分钟', time: '全天', done: false },
+      { t: '20 分钟快走', time: '12:30', done: false },
+      { t: '睡前拉伸 5 分钟', time: '22:40', done: false }
+    ]
+  };
+
+  const TODAY = [
+    { t: '起床后晒 10 分钟太阳', time: '07:30', done: true },
+    { t: '维生素D3 1000 单位', time: '08:00', done: true },
+    { t: '午间快走 15 分钟', time: '12:30', done: false },
+    { t: '屏幕调暗', time: '22:30', done: false },
+    { t: '上床睡觉', time: '23:10', done: false }
+  ];
+
+  const SUPP = [
+    { name: '维生素D3', dose: '1000 单位 · 早晨', filled: 5 },
+    { name: '欧米伽-3', dose: '1 克 · 随餐', filled: 4 },
+    { name: '镁', dose: '200 毫克 · 睡前', filled: 6 }
+  ];
+
+  function checkRow(item, i, scope) {
+    return `<button type="button" class="checkrow ${item.done ? 'done' : ''}" data-check="${scope}:${i}">
+      <span class="box">✓</span>
+      <span class="label">${item.t}</span>
+      <span class="time">${item.time}</span>
+    </button>`;
+  }
+
+  function renderFocus() {
+    [1, 2, 3].forEach((n) => {
+      const items = FOCUS[n];
+      const done = items.filter((i) => i.done).length;
+      $(`[data-items="${n}"]`).innerHTML = items.map((it, i) => checkRow(it, i, `focus${n}`)).join('');
+      $(`[data-ring="${n}"]`).innerHTML = ringSVG((done / items.length) * 100, 44, 3.5,
+        n === 1 ? '#D7F43A' : '#0F110F', n === 1 ? 'rgba(255,255,255,.2)' : '#ECECEA') +
+        `<span>${done}/${items.length}</span>`;
+    });
+    $('#todayList').innerHTML = TODAY.map((it, i) => checkRow(it, i, 'today')).join('');
+    updatePlanCount();
+  }
+
+  function updatePlanCount() {
+    const done = TODAY.filter((i) => i.done).length;
+    $('#todayCount').textContent = `${done}/${TODAY.length}`;
+    $('#planMiniCount').textContent = `${done}/${TODAY.length}`;
+    // 总览里的迷你清单显示前 3 项
+    $('#planMini').innerHTML = TODAY.slice(0, 3).map((it, i) => checkRow(it, i, 'today')).join('');
+  }
+
+  function renderSupp() {
+    $('#suppList').innerHTML = SUPP.map((s) => `
+      <div class="supp-row">
+        <div>
+          <div class="supp-name">${s.name}</div>
+          <div class="supp-dose">${s.dose}</div>
+        </div>
+        <div class="pills">${Array.from({ length: 7 }, (_, i) =>
+          `<i class="${i < s.filled ? 'on' : ''}"></i>`).join('')}</div>
+      </div>`).join('');
+  }
+
+  /* ---------------- 8. 本地模型对话 ---------------- */
+  const THREADS = [
+    { id: '01', t: '今日状态复盘', p: '心率变异性 23.7 毫秒，明天 8.5/10', active: true },
+    { id: '02', t: '心率变异性预警解读', p: '偏离基线 5.4 个标准差，什么意思', active: false },
+    { id: '03', t: '睡眠改善计划', p: '深睡为什么掉到 47 分钟', active: false },
+    { id: '04', t: '期末周训练调整', p: '把高强度训练换成散步', active: false }
+  ];
+
+  const CHAT = [
+    { k: 'day', text: '示例对话' },
+    { k: 'model', text: '主人，昨晚心率变异性掉到 23.7 毫秒，是这 14 天最低；深睡只有 47 分钟。明天的压力预测是 8.5/10。' },
+    { k: 'user', text: '那明天的口语考试怎么办？' },
+    { k: 'model', text: '主人，先别熬到两点。今晚 23:10 上床，明早用 20 分钟过一遍关键词，考前做 3 分钟呼吸。' },
+    { k: 'user', text: '加进清单吧。' },
+    { k: 'model', text: '已加 2 项：23:10 上床、考前 3 分钟呼吸。另外你连续两天久坐超过 780 分钟，我把「久坐时长」标成了「偏低」。' },
+    { k: 'card', text: '' }
+  ];
+
+  function msgHTML(m, i) {
+    if (m.k === 'day') return `<div class="chat-day">${m.text}</div>`;
+    if (m.k === 'card') return `<div class="msg-card">
+        <div class="mc-l"><b>心率变异性</b><span>心血管 · 示例</span></div>
+        <div class="mc-v">23.7<small>毫秒</small></div>
+        <span class="chip chip-low">偏低</span>
+      </div>`;
+    return `<div class="msg ${m.k}">
+      <div class="bubble">${m.text}</div>
+    </div>`;
+  }
+
+  function renderChat() {
+    $('#chatLog').innerHTML = CHAT.map(msgHTML).join('') + `<div id="chatEnd"></div>`;
+  }
+
+  function renderCareChrome() {
+    $('#threadList').innerHTML = THREADS.map((t) => `
+      <button type="button" class="thread ${t.active ? 'is-active' : ''}" data-thread="${t.id}">
+        <span class="tavatar">${t.id}</span>
+        <span class="tbody"><b>${t.t}</b><span>${t.p}</span></span>
+        ${t.active ? '<span class="dot"></span>' : ''}
+      </button>`).join('');
+
+    $('#dayChips').innerHTML = ['周一', '周二', '周三', '周四', '周五']
+      .map((d, i) => `<button type="button" class="daychip is-plain ${i === 0 ? 'is-active' : ''}" data-day="${i}">
+        <b>${d}</b></button>`).join('');
+
+    const slots = [['08:30', 1], ['10:00', 0], ['12:30', 1], ['14:00', 1], ['16:30', 1], ['19:00', 1]];
+    $('#slotGrid').innerHTML = slots.map(([s, ok], i) =>
+      `<button type="button" class="slotchip ${i === 3 ? 'is-active' : ''}" ${ok ? '' : 'disabled'} data-slot="${s}">${s}</button>`).join('');
+  }
+
+  /* ---------------- 9. 路由 ---------------- */
+  const ROUTES = ['overview', 'biomarkers', 'sleep', 'plan', 'care', '404'];
+
+  function currentRoute() {
+    const raw = location.hash.replace(/^#\/?/, '').toLowerCase();
+    if (!raw) return 'overview';
+    return ROUTES.includes(raw) ? raw : '404';
+  }
+
+  function renderRoute() {
+    const route = currentRoute();
+    $$('.page').forEach((p) => p.classList.toggle('is-active', p.dataset.page === route));
+    $$('[data-route]').forEach((a) => a.classList.toggle('is-active', a.dataset.route === route));
+    const page = $(`#page-${route}`);
+    if (page) {
+      // 重放入场动画
+      page.classList.remove('is-active');
+      void page.offsetWidth;
+      page.classList.add('is-active');
+      $$('.stage-block', page).forEach((el, i) => {
+        el.style.animation = 'none';
+        void el.offsetWidth;
+        el.style.animation = `blockIn .65s var(--ease) ${i * 32}ms both`;
+      });
+    }
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  /* ---------------- 10. 事件 ---------------- */
+  function bind() {
+    window.addEventListener('hashchange', renderRoute);
+
+    // 总览：指标磁贴 → 指标页并选中
+    document.addEventListener('click', (e) => {
+      const jump = e.target.closest('[data-jump]');
+      if (jump) {
+        activeMarker = jump.dataset.jump;
+        filters.status = 'All';
+        filters.cat = 'All';
+        syncFilterUI();
+        renderCats();
+        renderMarkers();
+        renderDetail(activeMarker);
+        location.hash = '#/biomarkers';
+        return;
+      }
+
+      const row = e.target.closest('[data-marker]');
+      if (row) {
+        activeMarker = row.dataset.marker;
+        $$('.mrow').forEach((n) => n.classList.toggle('is-active', n.dataset.marker === activeMarker));
+        renderDetail(activeMarker);
+        return;
+      }
+
+      const cat = e.target.closest('[data-cat]');
+      if (cat) {
+        filters.cat = cat.dataset.cat;
+        renderCats();
+        renderMarkers();
+        if (!visibleMarkers().some((m) => m.id === activeMarker) && visibleMarkers()[0]) {
+          activeMarker = visibleMarkers()[0].id;
+          renderDetail(activeMarker);
+        }
+        return;
+      }
+
+      const status = e.target.closest('[data-status]');
+      if (status) {
+        filters.status = status.dataset.status;
+        syncFilterUI();
+        renderMarkers();
+        if (!visibleMarkers().some((m) => m.id === activeMarker) && visibleMarkers()[0]) {
+          activeMarker = visibleMarkers()[0].id;
+          renderDetail(activeMarker);
+        }
+        return;
+      }
+
+      const check = e.target.closest('[data-check]');
+      if (check) {
+        const [scope, idx] = check.dataset.check.split(':');
+        if (scope === 'today') {
+          TODAY[+idx].done = !TODAY[+idx].done;
+          updatePlanCount();
+          $('#todayList').innerHTML = TODAY.map((it, i) => checkRow(it, i, 'today')).join('');
+        } else {
+          const n = scope.replace('focus', '');
+          FOCUS[n][+idx].done = !FOCUS[n][+idx].done;
+          renderFocus();
+        }
+        return;
+      }
+
+      const thread = e.target.closest('[data-thread]');
+      if (thread) {
+        $$('.thread').forEach((t) => t.classList.toggle('is-active', t === thread));
+        toast('切换会话待接入：预览版只展示示例对话');
+        return;
+      }
+
+      const day = e.target.closest('[data-day]');
+      if (day) {
+        $$('[data-day]').forEach((d) => d.classList.toggle('is-active', d === day));
+        toast('预约排期待接入：预览版为占位');
+        return;
+      }
+
+      const slot = e.target.closest('[data-slot]');
+      if (slot) {
+        $$('[data-slot]').forEach((s) => s.classList.toggle('is-active', s === slot));
+        toast('时段选择为视觉占位，未提交排期');
+        return;
+      }
+
+      const refresh = e.target.closest('#refreshPred');
+      if (refresh) {
+        toast('刷新预测功能待接入：正式版会重新调用预测接口');
+        return;
+      }
+
+      const navPredict = e.target.closest('#navPredict');
+      if (navPredict) {
+        location.hash = '#/overview';
+        setTimeout(() => {
+          const card = $('.pred');
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          toast('生成明日预测功能待接入：正式版会调用预测接口');
+        }, 60);
+        return;
+      }
+    });
+
+    // 表单：迷你聊天 / 详情提问 / 主对话
+    document.addEventListener('submit', (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+
+      if (form.dataset.chat === 'mini') {
+        e.preventDefault();
+        const input = form.querySelector('input');
+        toast('本地模型对话待接入：预览版仅呈现界面');
+        input.value = '';
+        return;
+      }
+
+      if (form.dataset.ask) {
+        e.preventDefault();
+        const input = form.querySelector('input');
+        const q = input.value.trim() || '解释一下这项指标的变化';
+        location.hash = '#/care';
+        const main = $('#chatInput');
+        main.value = q;
+        setTimeout(() => { main.focus(); }, 80);
+        toast('已把问题带到对话页 · 发送逻辑待接入');
+        input.value = '';
+        return;
+      }
+
+      if (form.id === 'chatForm') {
+        e.preventDefault();
+        const input = $('#chatInput');
+        const text = input.value.trim();
+        if (!text) return;
+        appendChat(text);
+        input.value = '';
+      }
+    });
+  }
+
+  function appendChat(text) {
+    const log = $('#chatLog');
+    const end = $('#chatEnd') || log;
+    const now = new Date();
+    const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const user = document.createElement('div');
+    user.className = 'msg user';
+    user.innerHTML = `<div class="bubble"></div><span class="stamp">${stamp}</span>`;
+    user.querySelector('.bubble').textContent = text;
+    log.insertBefore(user, end);
+
+    const typing = document.createElement('div');
+    typing.className = 'msg model';
+    typing.innerHTML = `<div class="typing"><i></i><i></i><i></i></div>`;
+    log.insertBefore(typing, end);
+
+    setTimeout(() => {
+      typing.remove();
+      const hint = document.createElement('div');
+      hint.className = 'msg system';
+      hint.innerHTML = `<div class="bubble" style="background:transparent;border:1px dashed var(--line-2);color:var(--ink-4);font-size:12px">
+        预览版：本地模型接口尚未接入，这里不会返回真实回复。</div>`;
+      log.insertBefore(hint, end);
+      toast('本地模型推理待接入：正式版在此返回真实回复');
+    }, 850);
+  }
+
+  function syncFilterUI() {
+    $$('#statusSeg [data-status]').forEach((b) =>
+      b.classList.toggle('is-active', b.dataset.status === filters.status));
+  }
+
+  /* ---------------- 11. 启动 ---------------- */
+  renderTiles();
+  renderBioAge();
+  renderBasis();
+  renderSleepMini();
+  renderTrends();
+  renderCats();
+  renderMarkers();
+  renderDetail(activeMarker);
+  renderStages();
+  renderSleepPage();
+  renderFocus();
+  renderSupp();
+  renderChat();
+  renderCareChrome();
+  bind();
+  if (!location.hash) history.replaceState(null, '', '#/overview');
+  renderRoute();
+})();
+</script>
+</body>
+</html>

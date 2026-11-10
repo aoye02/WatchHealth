@@ -28,7 +28,7 @@ def detect_hrv_drop(hrv_series: list, window: int = 7, z_thresh: float = 2.5) ->
         "baseline_hrv": round(mu, 1),
         "drop_pct": round(float(drop_pct), 1),
         "z_score": round(float(z), 2),
-        "message": "HRV 连续下降超过 15%，建议今晚早睡，避免熬夜" if alert else "HRV 正常",
+        "message": "心率变异性连续下降超过 15%，建议今晚早睡，避免熬夜" if alert else "心率变异性正常",
     }
 
 

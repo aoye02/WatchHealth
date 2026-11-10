@@ -30,7 +30,7 @@ WatchHealth-LSTM/
 │  ├─ main.py
 │  ├─ llm_prompt.py           ← 讯飞星火 HTTP 接入 + 本地模板兜底
 │  └─ requirements.txt
-├─ frontend/                  ← 演示看板（单页 HTML + 本地 ECharts，无需 npm）
+├─ frontend/                  ← 健康看板（Mira Bio 风格单页，无需 npm）
 │  ├─ index.html
 │  └─ lib/echarts.min.js      ← 已本地化，断网可演示
 ├─ presentation/              ← PPT 全套材料（重点！）
@@ -56,14 +56,14 @@ python predict.py                # 测试单条预测
 # 3. 启动后端（看板由后端托管，无需 npm）
 cd ../backend
 uvicorn main:app --port 8000
-# 浏览器打开 http://localhost:8000 看演示看板，/docs 看接口
+# 浏览器打开 http://localhost:8000 看健康看板，/docs 看接口
 # 可选：设置环境变量 SPARK_API_PASSWORD 后，AI 简报走讯飞星火实时生成
 ```
 
 ## 技术栈
 - **模型**：PyTorch LSTM（2 层，hidden=64，参数量 5.4 万）
 - **后端**：FastAPI + Uvicorn
-- **前端**：单页 HTML + ECharts（已本地化，断网可演示）
+- **前端**：单页 HTML/CSS/JS（Mira Bio 风格，无框架、无 CDN，断网可演示）
 - **LLM**：讯飞星火（spark-lite HTTP 接口，无 key 时本地模板兜底）
 - **数据**：WESAD 公开集 + 6 人 × 14 天自采集 + 合成演示数据
 - **评估**：留一用户验证（5 人训练 / 1 人测试），标准化仅用训练集拟合

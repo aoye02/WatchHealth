@@ -20,7 +20,7 @@ SYSTEM_PROMPT = """你是一个温和的大学生健康助手。基于模型给�
 要求：
 1. 语气像朋友，不要机器人腔
 2. 不要做任何医疗诊断
-3. 如果发现 HRV 异常下降，要建议"必要时咨询医生"
+3. 如果发现心率变异性异常下降，要建议"必要时咨询医生"
 4. 不要罗列数字，要给出一句可执行的建议
 """
 
@@ -30,7 +30,7 @@ def build_user_prompt(pred: dict, anomaly: dict) -> str:
 - 明日压力分: {pred.get('stress')}/10
 - 明日疲劳分: {pred.get('fatigue')}/10
 - 系统建议: {pred.get('advice')}
-- HRV 异常预警: {anomaly.get('message')}
+- 心率变异性异常预警: {anomaly.get('message')}
 
 请生成一段 80 字以内的健康简报。"""
 
@@ -38,7 +38,7 @@ def build_user_prompt(pred: dict, anomaly: dict) -> str:
 def _template_brief(pred: dict, anomaly: dict) -> str:
     """本地模板兜底：没有 API key 或调用失败时使用，保证演示不崩。"""
     if anomaly.get("alert"):
-        return (f"最近你压力有点大（{pred['stress']}/10），HRV 也在持续下降，"
+        return (f"最近你压力有点大（{pred['stress']}/10），心率变异性也在持续下降，"
                 f"今晚早点睡，别再熬夜了。如果持续不舒服，记得去校医院看看。")
     return f"明天压力预测 {pred['stress']}/10。{pred['advice']}。状态还行，按自己节奏来就好。"
 
@@ -73,6 +73,6 @@ def generate_brief(pred: dict, anomaly: dict) -> dict:
 
 if __name__ == "__main__":
     demo_pred = {"stress": 7.2, "fatigue": 6.5, "advice": "推荐轻运动（瑜伽/散步），今晚 23:30 前入睡"}
-    demo_anomaly = {"alert": True, "message": "HRV 连续下降超过 15%，建议今晚早睡，避免熬夜"}
+    demo_anomaly = {"alert": True, "message": "心率变异性连续下降超过 15%，建议今晚早睡，避免熬夜"}
     out = generate_brief(demo_pred, demo_anomaly)
     print(f"[{out['source']}] {out['text']}")
