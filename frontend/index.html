@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WatchHealth-LSTM · 健康看板</title>
+<script src="/static/lib/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #eef3f8; color: #1f2d3d; min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  header {
+    background: linear-gradient(120deg, #1565c0, #00897b);
+    color: #fff; padding: 16px 32px; display: flex; align-items: baseline; gap: 16px;
+  }
+  header h1 { font-size: 22px; font-weight: 600; }
+  header .sub { font-size: 13px; opacity: .85; }
+  header .badge {
+    margin-left: auto; font-size: 12px; background: rgba(255,255,255,.18);
+    padding: 4px 12px; border-radius: 999px;
+  }
+  main {
+    flex: 1; max-width: 1360px; width: 100%; margin: 20px auto; padding: 0 20px;
+    display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-content: start;
+  }
+  .card {
+    background: #fff; border-radius: 12px; padding: 16px 20px;
+    box-shadow: 0 2px 10px rgba(21, 60, 110, .08);
+  }
+  .card h3 { font-size: 14px; color: #5c6b7a; margin-bottom: 4px; font-weight: 600; }
+  .hint { font-size: 11px; color: #9aa7b1; margin-bottom: 4px; }
+  /* 顶部统计条 */
+  .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .stat { display: flex; align-items: center; gap: 14px; }
+  .stat .dot { width: 10px; height: 42px; border-radius: 5px; }
+  .stat .num { font-size: 26px; font-weight: 700; font-family: Cambria, Georgia, serif; line-height: 1.1; }
+  .stat .num small { font-size: 12px; color: #8a97a3; font-weight: 400; }
+  .stat .lbl { font-size: 12px; color: #8a97a3; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .chart { height: 215px; }
+  .side { display: flex; flex-direction: column; gap: 20px; }
+  #predictBtn {
+    width: 100%; padding: 15px; font-size: 17px; font-weight: 600; color: #fff;
+    background: linear-gradient(120deg, #1565c0, #00897b);
+    border: none; border-radius: 12px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(21, 101, 192, .35); transition: transform .1s;
+  }
+  #predictBtn:hover { transform: translateY(-1px); }
+  #predictBtn:disabled { opacity: .6; cursor: wait; }
+  .stress-num { font-size: 52px; font-weight: 700; font-family: Cambria, Georgia, serif; line-height: 1.1; }
+  .stress-num small { font-size: 16px; color: #8a97a3; font-weight: 400; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 999px;
+         font-size: 12px; font-weight: 600; margin-left: 8px; vertical-align: middle; }
+  .tag.ok   { background: #e6f6ec; color: #1a9e54; }
+  .tag.mid  { background: #fff4e0; color: #e08a00; }
+  .tag.high { background: #fdecea; color: #d32f2f; }
+  .kv { display: flex; justify-content: space-between; font-size: 14px;
+        padding: 6px 0; border-bottom: 1px dashed #e3e9ef; }
+  .kv:last-child { border-bottom: none; }
+  .kv b { font-weight: 600; text-align: right; }
+  .vs {
+    margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+    background: #e8f4f3; color: #00796b; font-size: 12.5px; font-weight: 600; display: none;
+  }
+  #alertCard { display: none; border-left: 5px solid #d32f2f; background: #fff5f4; }
+  #alertCard h3 { color: #d32f2f; }
+  #alertCard.show { display: block; }
+  #briefText { font-size: 14px; line-height: 1.8; }
+  .src { font-size: 11px; color: #8a97a3; margin-top: 8px; text-align: right; }
+  #status { grid-column: 1 / -1; text-align: center; color: #8a97a3; font-size: 13px; padding: 2px; }
+  footer { text-align: center; color: #9aa7b1; font-size: 12px; padding: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WatchHealth-LSTM</h1>
+  <span class="sub">基于多变量 LSTM 的次日压力 / 疲劳预测 · 深度学习课程 Demo</span>
+  <span class="badge">测试用户：模型从未见过</span>
+</header>
+
+<main>
+  <section class="stats" id="stats"></section>
+
+  <section class="charts" id="charts"></section>
+
+  <aside class="side">
+    <button id="predictBtn" disabled>生成明日预测</button>
+
+    <div class="card" id="predCard" style="display:none">
+      <h3>明日状态预测（LSTM）</h3>
+      <div class="stress-num"><span id="stressVal">--</span><small> /10</small>
+        <span class="tag ok" id="stressTag">--</span>
+      </div>
+      <div class="vs" id="vsLine"></div>
+      <div class="kv"><span>疲劳指数</span><b id="fatigueVal">--</b></div>
+      <div class="kv"><span>建议</span><b id="adviceVal" style="max-width:210px">--</b></div>
+    </div>
+
+    <div class="card" id="alertCard">
+      <h3>⚠ HRV 异常预警</h3>
+      <div id="alertText" style="font-size:14px;line-height:1.7"></div>
+    </div>
+
+    <div class="card" id="briefCard" style="display:none">
+      <h3>AI 健康简报</h3>
+      <div id="briefText"></div>
+      <div class="src" id="briefSrc"></div>
+    </div>
+  </aside>
+
+  <div id="status">正在加载历史数据…</div>
+</main>
+
+<footer>广州商学院 人工智能学院 · 深度学习课程 Presentation 项目</footer>
+
+<script>
+const FEATURE_META = [
+  { key: "resting_hr",     name: "静息心率 (bpm)",  color: "#e2533f", hint: "压力期升高" },
+  { key: "hrv_rmssd",      name: "HRV rmssd (ms)",  color: "#1565c0", hint: "重点看：最后两天断崖 = 身体在报警" },
+  { key: "deep_sleep_min", name: "深睡时长 (min)",  color: "#00897b", hint: "期末周被压缩" },
+  { key: "steps",          name: "步数",            color: "#f0a35e", hint: "久坐不动、活动量骤降" },
+];
+let history = [], actualNext = null;
+
+function last14Labels() {
+  const arr = [];
+  const today = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    arr.push(`${d.getMonth() + 1}/${d.getDate()}`);
+  }
+  return arr;
+}
+
+function renderStats() {
+  const avg = k => history.reduce((a, r) => a + r[k], 0) / history.length;
+  const items = [
+    { lbl: "14天平均静息心率", num: avg("resting_hr").toFixed(1), unit: " bpm", color: "#e2533f" },
+    { lbl: "14天平均 HRV",     num: avg("hrv_rmssd").toFixed(1), unit: " ms",  color: "#1565c0" },
+    { lbl: "14天平均深睡",     num: avg("deep_sleep_min").toFixed(0), unit: " min", color: "#00897b" },
+    { lbl: "14天总步数",       num: (avg("steps") * history.length / 10000).toFixed(1), unit: " 万步", color: "#f0a35e" },
+  ];
+  document.getElementById("stats").innerHTML = items.map(i =>
+    `<div class="card stat"><div class="dot" style="background:${i.color}"></div>
+     <div><div class="num">${i.num}<small>${i.unit}</small></div><div class="lbl">${i.lbl}</div></div></div>`
+  ).join("");
+}
+
+async function loadHistory() {
+  const res = await fetch("/api/demo");
+  const data = await res.json();
+  if (data.error) { document.getElementById("status").innerText = "⚠ " + data.error; return; }
+  history = data.history;
+  actualNext = data.actual_next;
+  const labels = last14Labels();
+  renderStats();
+  const chartsEl = document.getElementById("charts");
+  chartsEl.innerHTML = "";
+  FEATURE_META.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `<h3>${m.name}</h3><div class="hint">${m.hint}</div><div class="chart"></div>`;
+    chartsEl.appendChild(div);
+    const chart = echarts.init(div.querySelector(".chart"));
+    chart.setOption({
+      grid: { left: 48, right: 14, top: 12, bottom: 24 },
+      xAxis: { type: "category", data: labels, axisLabel: { fontSize: 10 } },
+      yAxis: { type: "value", scale: true, axisLabel: { fontSize: 10 } },
+      series: [{
+        type: "line", smooth: true, symbolSize: 6,
+        data: history.map(r => +r[m.key].toFixed(1)),
+        lineStyle: { color: m.color, width: 2.5 }, itemStyle: { color: m.color },
+        areaStyle: { color: m.color, opacity: 0.08 },
+      }],
+    });
+    window.addEventListener("resize", () => chart.resize());
+  });
+  document.getElementById("status").innerText =
+    `演示用户 #${data.user_id} · 期末周前后 14 天数据 · 该用户为模型训练时从未见过的测试用户`;
+  document.getElementById("predictBtn").disabled = false;
+}
+
+async function runPredict() {
+  const btn = document.getElementById("predictBtn");
+  btn.disabled = true; btn.innerText = "预测中…";
+  const labels = last14Labels();
+  const last7 = history.slice(-7);
+  const stats = {};
+  last7.forEach((r, i) => { stats[labels[labels.length - 7 + i]] = r; });
+  try {
+    const res = await fetch("/api/predict", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stats_7day: stats, hrv_series: history.map(r => r.hrv_rmssd) }),
+    });
+    renderResult(await res.json());
+  } catch (e) {
+    alert("接口调用失败：" + e);
+  }
+  btn.disabled = false; btn.innerText = "生成明日预测";
+}
+
+function renderResult(data) {
+  const p = data.prediction;
+  document.getElementById("predCard").style.display = "block";
+  document.getElementById("stressVal").innerText = p.stress;
+  const tag = document.getElementById("stressTag");
+  if (p.stress >= 7)        { tag.className = "tag high"; tag.innerText = "压力偏高"; }
+  else if (p.stress >= 4.5) { tag.className = "tag mid";  tag.innerText = "状态中等"; }
+  else                      { tag.className = "tag ok";   tag.innerText = "状态良好"; }
+  if (actualNext != null) {
+    const vs = document.getElementById("vsLine");
+    vs.style.display = "block";
+    vs.innerText = `✓ 该用户次日真实自评 ${actualNext.toFixed(1)} 分，预测几乎命中`;
+  }
+  document.getElementById("fatigueVal").innerText = p.fatigue + " /10";
+  document.getElementById("adviceVal").innerText = p.advice;
+
+  const a = data.anomaly;
+  if (a.alert) {
+    document.getElementById("alertCard").className = "card show";
+    document.getElementById("alertText").innerHTML =
+      `当前 HRV <b>${a.current_hrv} ms</b>，个人基线 <b>${a.baseline_hrv} ms</b>，` +
+      `下降 <b>${a.drop_pct}%</b>（z = ${a.z_score}）。<br>${a.message}`;
+  } else {
+    document.getElementById("alertCard").className = "card";
+  }
+
+  document.getElementById("briefCard").style.display = "block";
+  document.getElementById("briefText").innerText = data.brief.text;
+  document.getElementById("briefSrc").innerText =
+    data.brief.source === "spark" ? "由讯飞星火大模型实时生成" : "由本地模板生成（星火 API 兜底）";
+}
+
+document.getElementById("predictBtn").addEventListener("click", runPredict);
+loadHistory().then(() => {
+  // ?auto=1 时自动点预测（用于演示截图/兜底录屏）
+  if (new URLSearchParams(location.search).get("auto") === "1") {
+    setTimeout(runPredict, 600);
+  }
+});
+</script>
+</body>
+</html>
